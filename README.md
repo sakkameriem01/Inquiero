@@ -5,7 +5,7 @@ An intelligent PDF chat application that allows users to upload PDF documents an
 ## Features
 
 - PDF document upload and processing
-- Intelligent question answering using Gemini AI
+- Intelligent question answering using Mistral (via Ollama)
 - Local text embedding for efficient document search
 - Modern web interface
 - Real-time chat interaction
@@ -14,7 +14,7 @@ An intelligent PDF chat application that allows users to upload PDF documents an
 
 - Python 3.8 or higher
 - Node.js 14 or higher (for frontend)
-- Google API key for Gemini AI
+- [Ollama](https://ollama.com) installed with Mistral model downloaded locally
 
 ## Installation
 
@@ -41,6 +41,7 @@ npm install
 4. Create a `.env` file in the backend directory:
 ```
 GOOGLE_API_KEY=your_google_api_key_here
+DATABASE_URL=sqlite:///./chat_history.db
 ```
 
 ## Running the Application
@@ -61,10 +62,10 @@ npm start
 
 ## Usage
 
-1. Upload a PDF document using the file upload interface
+1. Easily upload single or multiple PDF documents.
 2. Wait for the document to be processed
 3. Start asking questions about the document's content
-4. View the AI-generated answers along with relevant source text
+4. View the AI-generated answers
 
 ## Project Structure
 
@@ -75,11 +76,13 @@ inquiero/
 │   │   ├── pdf_loader.py    # PDF processing and text extraction
 │   │   └── qa_chain.py      # Question answering system
 │   ├── main.py             # FastAPI server
-│   └── requirements.txt    # Python dependencies
+│   ├── requirements.txt    # Python dependencies
+│   ├── database.py         # Database connection and session management
+│   └── models.py           # Database models
 ├── frontend/
 │   ├── src/
 │   │   ├── components/     # React components
-│   │   └── App.tsx        # Main application component
+│   │   └── App.js          # Main application component
 │   └── package.json       # Node.js dependencies
 └── README.md
 ```
@@ -89,7 +92,7 @@ inquiero/
 ### Backend
 - FastAPI
 - LangChain
-- Google Generative AI
+- Ollama + Mistral (local model)
 - FAISS
 - Sentence Transformers
 - PyPDF2
