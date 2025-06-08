@@ -1,6 +1,6 @@
 # Inquiero
 
-An intelligent PDF chat application that allows users to upload PDF documents and ask questions about their content using Google's Gemini AI.
+An intelligent PDF chat application that allows users to upload PDF documents and ask questions about their content using a **locally hosted Mistral model via Ollama**.
 
 ## Features
 
