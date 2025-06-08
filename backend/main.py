@@ -8,17 +8,13 @@ from dotenv import load_dotenv
 from utils.pdf_loader import PDFProcessor, process_pdf
 from utils.qa_chain import QASystem
 from models import ChatSession, Message
-import tempfile
 import shutil
 import logging
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 from pydantic import BaseModel
-import uuid
 from datetime import datetime
 from sqlalchemy.orm import Session
-import json
-
 from database import get_db, engine
 from models import Base, Session as DBSession, File as DBFile
 

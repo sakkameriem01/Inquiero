@@ -1,7 +1,7 @@
 from langchain.chains import RetrievalQA
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import PromptTemplate
-from typing import List, Dict
+from typing import Dict
 import os
 from dotenv import load_dotenv
 import logging
