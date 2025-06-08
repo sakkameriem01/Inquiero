@@ -2,7 +2,7 @@ from typing import List, Dict
 from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS, Chroma
 import os
 from dotenv import load_dotenv
 import logging
@@ -17,7 +17,7 @@ class PDFProcessor:
     def __init__(self):
         # Initialize the local embeddings model
         self.embeddings = HuggingFaceEmbeddings(
-            model_name="all-MiniLM-L6-v2",  # A good balance of speed and quality
+            model_name="sentence-transformers/all-MiniLM-L6-v2",  
             model_kwargs={'device': 'cpu'},
             encode_kwargs={'normalize_embeddings': True}
         )
@@ -27,7 +27,7 @@ class PDFProcessor:
             length_function=len
         )
         self.vector_store = None
-        self.processed_files = {}  # Track processed files and their metadata
+        self.processed_files = {}  
 
     def extract_text_from_pdf(self, file_path: str, file_name: str) -> Dict[str, str]:
         """Extract text from PDF file and return with metadata."""
@@ -98,31 +98,47 @@ class PDFProcessor:
         except Exception as e:
             raise ValueError(f"Error creating/updating vector store: {str(e)}")
 
-    def process_pdf(self, file_path: str, file_name: str) -> Dict[str, int]:
-        """Process PDF file and add to vector store."""
+    def process_pdf(self, file_path: str, filename: str) -> dict:
+        """Process a PDF file and return chunks and pages info."""
         try:
-            # Extract text with metadata
-            pdf_data = self.extract_text_from_pdf(file_path, file_name)
-            
-            # Chunk text with metadata
-            chunks_with_metadata = self.chunk_text(pdf_data["text"], file_name)
+            # Read PDF
+            reader = PdfReader(file_path)
+            text = ""
+            for page in reader.pages:
+                text += page.extract_text() + "\n"
+
+            # Split text into chunks
+            chunks = self.text_splitter.split_text(text)
             
             # Create or update vector store
-            self.create_vector_store(chunks_with_metadata)
-            
-            # Track processed file
-            self.processed_files[file_name] = {
-                "chunks": len(chunks_with_metadata),
-                "pages": pdf_data["pages"]
+            if self.vector_store is None:
+                # Create a new vector store
+                self.vector_store = Chroma.from_texts(
+                    chunks,
+                    self.embeddings,
+                    metadatas=[{"source": filename, "chunk_index": i} for i in range(len(chunks))]
+                )
+            else:
+                # Update the existing vector store
+                self.vector_store.add_texts(
+                    chunks,
+                    metadatas=[{"source": filename, "chunk_index": i} for i in range(len(chunks))]
+                )
+
+            # Update processed files info
+            self.processed_files[filename] = {
+                "chunks": len(chunks),
+                "pages": len(reader.pages)
             }
-            
+
             return {
-                "chunks": len(chunks_with_metadata),
-                "pages": pdf_data["pages"]
+                "chunks": len(chunks),
+                "pages": len(reader.pages)
             }
+
         except Exception as e:
-            logger.error(f"Error processing PDF '{file_name}': {str(e)}")
-            raise ValueError(f"Error processing PDF '{file_name}': {str(e)}")
+            logger.error(f"Error processing PDF {filename}: {str(e)}")
+            raise
 
     def get_relevant_chunks(self, query: str, k: int = 4) -> List[Dict[str, str]]:
         """Get relevant chunks for a query with metadata."""
@@ -136,12 +152,35 @@ class PDFProcessor:
             "score": score
         } for doc, score in results]
 
-    def get_processed_files(self) -> Dict[str, Dict[str, int]]:
+    def get_processed_files(self) -> dict:
         """Get information about processed files."""
         return self.processed_files
 
     def clear_vector_store(self):
-        """Clear the vector store and processed files tracking."""
+        """Clear the vector store and processed files."""
         self.vector_store = None
         self.processed_files = {}
-        logger.info("Vector store and processed files tracking cleared") 
+        logger.info("Vector store and processed files tracking cleared")
+
+def process_pdf(file_path: str) -> tuple:
+    """Process a PDF file and return chunks and pages count."""
+    try:
+        # Read PDF
+        reader = PdfReader(file_path)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text() + "\n"
+
+        # Split text into chunks
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            length_function=len,
+        )
+        chunks = text_splitter.split_text(text)
+
+        return len(chunks), len(reader.pages)
+
+    except Exception as e:
+        logger.error(f"Error processing PDF {file_path}: {str(e)}")
+        raise 
