@@ -1,156 +1,221 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import PdfPreview from './PdfPreview';
+import { toast } from 'react-hot-toast';
 
 // API configuration
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
-const ChatHistory = ({ onSelectSession, onNewChat }) => {
+const ChatHistory = ({ onSelectSession, onNewChat, currentSession }) => {
   const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTag, setSelectedTag] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [editingTitle, setEditingTitle] = useState(null);
-  const [editingTags, setEditingTags] = useState(null);
-  const [previewPdf, setPreviewPdf] = useState(null);
+  const [editingSessionId, setEditingSessionId] = useState(null);
+  const [editingTitle, setEditingTitle] = useState('');
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
+  const [selectedPdf, setSelectedPdf] = useState(null);
+  const fileInputRef = useRef(null);
 
-  const fetchSessions = useCallback(async () => {
+  // Fetch sessions on component mount
+  useEffect(() => {
+    fetchSessions();
+  }, []);
+
+  const fetchSessions = async () => {
     try {
       setLoading(true);
-      setError('');
       const response = await fetch(`${API_BASE_URL}/sessions/`);
-      
       if (!response.ok) {
         throw new Error('Failed to fetch sessions');
       }
-
       const data = await response.json();
       setSessions(data);
-    } catch (err) {
-      console.error('Error fetching sessions:', err);
+      setError(null);
+    } catch (error) {
+      console.error('Error fetching sessions:', error);
       setError('Failed to load chat history');
-      setSessions([]);
+      toast.error('Failed to load chat history');
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    fetchSessions();
-  }, [fetchSessions]);
-
-  const handleNewChat = () => {
-    onNewChat();
-    fetchSessions(); // Refresh sessions after new chat
   };
 
-  const handleSelectSession = (session) => {
-    onSelectSession(session);
-  };
-
-  const handleDeleteSession = async (sessionId) => {
+  const handleViewSession = async (session) => {
     try {
-      setError('');
-      const response = await fetch(`${API_BASE_URL}/chat-sessions/${sessionId}`, {
-        method: 'DELETE',
+      // Show loading toast
+      toast.loading('Loading chat session...', {
+        id: 'loading-session',
+        duration: 2000,
       });
+
+      // Fetch full session details including messages
+      const response = await fetch(`${API_BASE_URL}/sessions/${session.id}`);
       
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to delete session: ${response.status} ${errorText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to fetch session details: ${response.statusText}`);
       }
+
+      const sessionData = await response.json();
       
-      await fetchSessions();
-    } catch (err) {
-      console.error('Error deleting session:', err);
-      setError(err.message || 'Failed to delete chat session');
+      if (!sessionData) {
+        throw new Error('No session data received');
+      }
+
+      // Call the parent's onSelectSession with the full session data
+      onSelectSession(sessionData);
+
+      // Show success toast
+      toast.success('Chat session loaded', {
+        id: 'loading-session',
+      });
+    } catch (error) {
+      console.error("Error loading chat session:", error);
+      toast.error(error.message || "Failed to load chat session", {
+        id: 'loading-session',
+      });
     }
   };
 
-  const handleUpdateSession = async (sessionId, updates) => {
+  const handleSaveSession = async (session) => {
     try {
-      setError('');
-      const response = await fetch(`${API_BASE_URL}/chat-sessions/${sessionId}`, {
+      const response = await fetch(`${API_BASE_URL}/chat-sessions/${session.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(updates),
+        body: JSON.stringify({
+          pinned: !session.pinned
+        }),
       });
-      
+
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to update session: ${response.status} ${errorText}`);
+        throw new Error('Failed to update session');
       }
-      
-      await fetchSessions();
-    } catch (err) {
-      console.error('Error updating session:', err);
-      setError(err.message || 'Failed to update session');
+
+      // Update local state
+      setSessions(prevSessions =>
+        prevSessions.map(s =>
+          s.id === session.id
+            ? { ...s, pinned: !s.pinned }
+            : s
+        )
+      );
+
+      toast.success(session.pinned ? 'Chat unpinned' : 'Chat pinned');
+    } catch (error) {
+      console.error('Error updating session:', error);
+      toast.error('Failed to update chat');
     }
   };
 
-  const handleUpdateTags = async (sessionId, tags) => {
-    await handleUpdateSession(sessionId, { tags });
-    setEditingTags(null);
+  const handleDeleteSession = async (sessionId) => {
+    if (!window.confirm('Are you sure you want to delete this chat?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/chat-sessions/${sessionId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete session');
+      }
+
+      // Update local state
+      setSessions(prevSessions =>
+        prevSessions.filter(s => s.id !== sessionId)
+      );
+
+      toast.success('Chat deleted');
+    } catch (error) {
+      console.error('Error deleting session:', error);
+      toast.error('Failed to delete chat');
+    }
   };
 
-  const handleTogglePin = async (sessionId, currentPinned) => {
-    await handleUpdateSession(sessionId, { pinned: !currentPinned });
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(`${API_BASE_URL}/upload/`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to upload file');
+      }
+
+      const data = await response.json();
+      
+      // Create a new session with the uploaded file
+      const newSession = {
+        id: Date.now().toString(),
+        title: file.name,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        files: [{
+          id: data.file_id,
+          filename: data.filename,
+          original_filename: data.original_filename
+        }]
+      };
+
+      setSessions(prev => [newSession, ...prev]);
+      toast.success('File uploaded successfully');
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      toast.error('Failed to upload file');
+    }
   };
 
-  const handleTitleEdit = async (sessionId, newTitle) => {
-    if (!newTitle) return;
-    await handleUpdateSession(sessionId, { title: newTitle });
-    setEditingTitle(null);
+  const handlePdfPreview = (filename) => {
+    setSelectedPdf(filename);
+    setShowPdfPreview(true);
   };
 
-  const handlePreviewPDF = (filename) => {
-    const encodedFilename = encodeURIComponent(filename);
-    setPreviewPdf(`${API_BASE_URL}/uploads/${encodedFilename}`);
+  const handleClosePdfPreview = () => {
+    setShowPdfPreview(false);
+    setSelectedPdf(null);
   };
 
-  const closePreview = () => {
-    setPreviewPdf(null);
-  };
+  // Filter sessions based on search term and selected tag
+  const filteredSessions = sessions.filter(session => {
+    const matchesSearch = session.title.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesTag = !selectedTag || session.tags?.includes(selectedTag);
+    return matchesSearch && matchesTag;
+  });
 
-  const allTags = Array.from(new Set(sessions.flatMap(session => session.tags)));
-
-  if (loading) {
-    return (
-      <div className="h-full bg-white p-4">
-        <div className="animate-pulse space-y-4">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-20 bg-gray-200 rounded-lg"></div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="h-full bg-white p-4">
-        <div className="text-red-500">Error loading chat history: {error}</div>
-      </div>
-    );
-  }
+  // Get all unique tags from sessions
+  const allTags = [...new Set(sessions.flatMap(session => session.tags || []))];
 
   return (
     <div className="h-full flex flex-col bg-white border-r border-gray-200">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
+      <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-white">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Chat History</h2>
-          <button
-            onClick={handleNewChat}
-            className="p-2 text-blue-600 hover:text-blue-700 rounded-lg hover:bg-blue-50"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
+          <h2 className="text-xl font-semibold text-gray-800">Chat History</h2>
+          <div className="flex space-x-2">
+            {/* New Chat Button */}
+            <button
+              onClick={onNewChat}
+              className="p-2 text-blue-600 hover:text-blue-700 rounded-lg hover:bg-blue-50 transition-all duration-200"
+              title="New Chat"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+          </div>
         </div>
-        
+
         {/* Search */}
         <div className="relative">
           <input
@@ -158,10 +223,10 @@ const ChatHistory = ({ onSelectSession, onNewChat }) => {
             placeholder="Search chats..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-2 pl-10 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
           />
           <svg
-            className="absolute right-3 top-2.5 h-5 w-5 text-gray-400"
+            className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -179,217 +244,160 @@ const ChatHistory = ({ onSelectSession, onNewChat }) => {
       {/* Error Message */}
       {error && (
         <div className="p-4 bg-red-50 border-b border-red-200">
-          <p className="text-sm text-red-600">{error}</p>
+          <div className="flex items-center space-x-2">
+            <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-sm text-red-600">{error}</p>
+          </div>
         </div>
       )}
 
       {/* Tags Filter */}
-      <div className="p-4 border-b border-gray-200">
-        <div className="flex flex-wrap gap-2">
-          {allTags.map((tag) => (
-            <button
-              key={tag}
-              onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
-              className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                selectedTag === tag
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+      {allTags.length > 0 && (
+        <div className="p-4 border-b border-gray-200 bg-gray-50">
+          <div className="flex flex-wrap gap-2">
+            {allTags.map((tag) => (
+              <button
+                key={tag}
+                onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+                  selectedTag === tag
+                    ? 'bg-blue-100 text-blue-700 shadow-sm'
+                    : 'bg-white text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Sessions List */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {loading ? (
+          <div className="flex justify-center items-center h-full">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+          </div>
+        ) : error ? (
+          <div className="text-red-500 text-center p-4">{error}</div>
+        ) : filteredSessions.length === 0 ? (
+          <div className="text-center text-gray-500 py-8">
+            <svg className="w-12 h-12 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+            </svg>
+            <p className="text-lg font-medium">No chats found</p>
+            <p className="text-sm">Start a new chat or upload a PDF to begin</p>
+          </div>
+        ) : (
+          filteredSessions.map((session) => (
+            <div
+              key={session.id}
+              className={`p-4 rounded-lg border transition-all duration-200 ${
+                currentSession?.id === session.id
+                  ? 'bg-blue-50 border-blue-200 shadow-sm'
+                  : session.pinned
+                  ? 'bg-yellow-50 border-yellow-200 border-l-4 shadow-sm'
+                  : 'hover:bg-gray-50 border-gray-200'
               }`}
             >
-              {tag}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Chat Sessions List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {sessions.map((session) => (
-          <div
-            key={session.id}
-            className={`bg-white rounded-lg border ${
-              session.pinned ? 'border-yellow-200 bg-yellow-50' : 'border-gray-200'
-            } p-4 hover:shadow-md transition-shadow`}
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                {editingTitle === session.id ? (
-                  <input
-                    type="text"
-                    defaultValue={session.title}
-                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    onBlur={(e) => handleTitleEdit(session.id, e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleTitleEdit(session.id, e.target.value);
-                      } else if (e.key === 'Escape') {
-                        setEditingTitle(null);
-                      }
-                    }}
-                    autoFocus
-                  />
-                ) : (
-                  <div className="flex items-center gap-2">
+              <div className="flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center space-x-2">
+                    {session.pinned && (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                      </svg>
+                    )}
                     <h3 
-                      className="font-medium text-gray-900 mb-2 cursor-pointer hover:text-blue-600"
-                      onClick={() => setEditingTitle(session.id)}
+                      className="text-sm font-medium text-gray-900 truncate cursor-pointer hover:text-blue-600 transition-colors"
+                      onClick={() => handleViewSession(session)}
+                      title={session.title}
                     >
                       {session.title}
                     </h3>
-                    {session.pinned && (
-                      <svg className="w-4 h-4 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                      </svg>
-                    )}
                   </div>
-                )}
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {editingTags === session.id ? (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        placeholder="Add tags (comma-separated)"
-                        className="px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        onBlur={(e) => {
-                          const tags = e.target.value.split(',').map(tag => tag.trim()).filter(Boolean);
-                          handleUpdateTags(session.id, tags);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            const tags = e.target.value.split(',').map(tag => tag.trim()).filter(Boolean);
-                            handleUpdateTags(session.id, tags);
-                          } else if (e.key === 'Escape') {
-                            setEditingTags(null);
-                          }
-                        }}
-                        defaultValue={session.tags.join(', ')}
-                        autoFocus
-                      />
-                    </div>
-                  ) : (
-                    <>
-                      {session.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs"
-                        >
-                          #{tag}
-                        </span>
-                      ))}
-                      <button
-                        onClick={() => setEditingTags(session.id)}
-                        className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs hover:bg-gray-200"
-                      >
-                        Edit Tags
-                      </button>
-                    </>
-                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    {new Date(session.updated_at).toLocaleDateString()}
+                  </p>
                 </div>
-                <p className="text-sm text-gray-500">
-                  {new Date(session.updated_at).toLocaleDateString()}
-                </p>
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleTogglePin(session.id, session.pinned);
-                  }}
-                  className={`p-1 rounded-lg hover:bg-yellow-50 ${
-                    session.pinned ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500'
-                  }`}
-                >
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleSelectSession(session);
-                  }}
-                  className="p-1 text-blue-600 hover:text-blue-700 rounded-lg hover:bg-blue-50"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                    />
-                  </svg>
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteSession(session.id);
-                  }}
-                  className="p-1 text-red-600 hover:text-red-700 rounded-lg hover:bg-red-50"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    />
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            {/* Files */}
-            {session.files && session.files.length > 0 && (
-              <div className="mt-2 space-y-1">
-                {session.files.map((file, index) => (
-                  <div
-                    key={index}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handlePreviewPDF(file);
-                    }}
-                    className="flex items-center space-x-2 text-sm text-gray-600 hover:text-blue-600 cursor-pointer group"
+                <div className="flex items-center space-x-1">
+                  <button
+                    onClick={() => handleViewSession(session)}
+                    className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors duration-200 rounded-full hover:bg-blue-50"
+                    title="Open chat"
                   >
-                    <span className="text-lg">📄</span>
-                    <span className="truncate flex-1">{file}</span>
-                  </div>
-                ))}
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => handleSaveSession(session)}
+                    className={`p-1.5 transition-colors duration-200 rounded-full ${
+                      session.pinned
+                        ? 'text-yellow-500 hover:bg-yellow-100'
+                        : 'text-gray-400 hover:text-yellow-500 hover:bg-yellow-50'
+                    }`}
+                    title={session.pinned ? "Unfavorite chat" : "Favorite chat"}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill={session.pinned ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => handleDeleteSession(session.id)}
+                    className="p-1.5 text-gray-400 hover:text-red-500 transition-colors duration-200 rounded-full hover:bg-red-50"
+                    title="Delete chat"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                    </svg>
+                  </button>
+                </div>
               </div>
-            )}
-          </div>
-        ))}
+              
+              {session.files && session.files.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <div className="flex items-center space-x-2 text-xs text-gray-500 mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    <span>Attached Files</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {session.files.map((file) => (
+                      <div
+                        key={file.id}
+                        className="flex items-center space-x-2 text-sm text-gray-600 hover:text-blue-600 cursor-pointer group bg-gray-50 hover:bg-blue-50 px-2 py-1.5 rounded transition-colors duration-200"
+                        onClick={() => handlePdfPreview(file.filename)}
+                      >
+                        <svg className="w-4 h-4 text-gray-400 group-hover:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                        <span 
+                          className="truncate max-w-[200px]" 
+                          title={file.original_filename}
+                        >
+                          {file.original_filename}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))
+        )}
       </div>
 
       {/* PDF Preview Modal */}
-      {previewPdf && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">PDF Preview</h3>
-              <button
-                onClick={closePreview}
-                className="text-gray-400 hover:text-gray-600 focus:outline-none"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <iframe
-                src={previewPdf}
-                className="w-full h-full"
-                title="PDF Preview"
-              />
-            </div>
-          </div>
-        </div>
+      {showPdfPreview && selectedPdf && (
+        <PdfPreview
+          filename={selectedPdf}
+          onClose={handleClosePdfPreview}
+        />
       )}
     </div>
   );

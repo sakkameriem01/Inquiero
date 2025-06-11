@@ -6,6 +6,7 @@ const API_BASE_URL = 'http://localhost:8000';
 
 function App() {
   const [files, setFiles] = useState([]);
+  const [uploadedFiles, setUploadedFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [messages, setMessages] = useState([]);
@@ -53,6 +54,7 @@ function App() {
     setCurrentSession(null);
     setMessages([]);
     setHasUploadedFiles(false);
+    setUploadedFiles([]);
     // Clear the backend's processed files
     fetch(`${API_BASE_URL}/files/`, {
       method: 'DELETE',
@@ -60,10 +62,18 @@ function App() {
   };
 
   const handleSelectSession = (session) => {
-    setCurrentSession(session);
-    setMessages(session.messages);
-    // Check if the session has files
-    setHasUploadedFiles(session.files && session.files.length > 0);
+    try {
+      setCurrentSession(session);
+      // Ensure messages is always an array
+      setMessages(session.messages || []);
+      // Check if the session has files
+      setHasUploadedFiles(session.files && session.files.length > 0);
+      // Scroll to bottom of messages
+      setTimeout(scrollToBottom, 100);
+    } catch (error) {
+      console.error("Error selecting session:", error);
+      setError("Failed to open chat session");
+    }
   };
 
   const handleFileChange = (e) => {
@@ -78,25 +88,24 @@ function App() {
     }
   };
 
-  const handleUpload = async () => {
+  const handleFileUpload = async () => {
     if (files.length === 0) {
-      setError('Please select at least one PDF file');
+      setError('Please select a file first');
       return;
     }
 
-    setLoading(true);
-    setError('');
-
     try {
-      // Clear previous files before uploading new ones
-      await fetch(`${API_BASE_URL}/files/`, {
-        method: 'DELETE',
-      });
+      setLoading(true);
+      setError('');
 
-      // Upload files sequentially
       for (const file of files) {
         const formData = new FormData();
         formData.append('file', file);
+        
+        // If there's an active session, include its ID
+        if (currentSession) {
+          formData.append('session_id', currentSession.id);
+        }
 
         const response = await fetch(`${API_BASE_URL}/upload/`, {
           method: 'POST',
@@ -104,25 +113,56 @@ function App() {
         });
 
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const error = await response.json();
+          throw new Error(error.detail || 'Failed to upload file');
         }
 
-        await response.json(); // Still process the response but don't use it for messages
+        const result = await response.json();
+        
+        // Add the uploaded file to the uploadedFiles state
+        setUploadedFiles(prev => [...prev, {
+          id: result.file_id,
+          filename: result.original_filename,
+          chunks: result.chunks,
+          pages: result.pages,
+          uploadedAt: new Date().toISOString()
+        }]);
+        
+        // If no active session, create a new one
+        if (!currentSession) {
+          const newSession = {
+            title: file.name,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            pinned: false,
+            files: [{
+              id: result.file_id,
+              filename: result.filename,
+              original_filename: result.original_filename,
+              file_type: 'pdf',
+              chunk_count: result.chunks,
+              page_count: result.pages
+            }]
+          };
+          setCurrentSession(newSession);
+        }
       }
 
-      setHasUploadedFiles(true);
+      // Clear the files array and input
       setFiles([]);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
-
-      // Show success toast
-      const fileNames = files.map(f => f.name).join(', ');
-      setSuccessMessage(`${fileNames} is all set! Go ahead, ask me anything! 🕵️‍♀️💬`);
+      
+      // Set hasUploadedFiles to true after successful upload
+      setHasUploadedFiles(true);
+      
+      // Show success message
+      setSuccessMessage('Files uploaded successfully');
       setShowSuccessToast(true);
-
-    } catch (err) {
-      setError(err.message || 'Error uploading files');
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      setError(error.message || 'Failed to upload file');
     } finally {
       setLoading(false);
     }
@@ -152,6 +192,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
         body: JSON.stringify({
           question: userMessage,
@@ -160,11 +201,11 @@ function App() {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to get response');
-      }
-
       const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || data.message || 'Failed to get answer');
+      }
       
       // Simulate typing delay
       setTimeout(() => {
@@ -172,10 +213,10 @@ function App() {
         // Add assistant's response
         setMessages(prev => [...prev, { 
           type: 'assistant', 
-          content: data.answer
+          content: data.answer || 'Sorry, I could not generate a response.'
         }]);
 
-        // Update current session if it's a new one
+        // Only update session if we don't have one
         if (!currentSession && data.session) {
           setCurrentSession(data.session);
         }
@@ -186,7 +227,7 @@ function App() {
       setIsTyping(false);
       setMessages(prev => [...prev, { 
         type: 'error', 
-        content: 'Sorry, I encountered an error. Please try again.' 
+        content: error.message || 'Sorry, I encountered an error. Please try again.' 
       }]);
     } finally {
       setIsProcessing(false);
@@ -201,17 +242,20 @@ function App() {
     <div className="flex h-screen bg-gray-100">
       {/* Welcome Toast */}
       {showToast && (
-        <div className="fixed top-4 right-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-lg shadow-lg p-4 border border-gray-100 flex items-center space-x-3">
-            <div className="flex-shrink-0">
-              <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="fixed top-4 right-4 z-50 animate-slide-in">
+          <div className="bg-white rounded-lg shadow-xl p-4 border border-blue-100 flex items-center space-x-3 max-w-md transform transition-all duration-300 hover:scale-105">
+            <div className="flex-shrink-0 bg-blue-100 p-2 rounded-full">
+              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <p className="text-gray-700">Welcome! Please upload your PDF file(s) to start chatting.</p>
+            <div className="flex-1">
+              <p className="text-gray-800 font-medium">Welcome to Inquiero!</p>
+              <p className="text-gray-600 text-sm mt-1">Upload your PDF file(s) to start chatting with your documents.</p>
+            </div>
             <button
               onClick={() => setShowToast(false)}
-              className="flex-shrink-0 text-gray-400 hover:text-gray-600"
+              className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors duration-200"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -223,17 +267,20 @@ function App() {
 
       {/* Success Toast */}
       {showSuccessToast && (
-        <div className="fixed top-4 right-4 z-50 animate-fade-in">
-          <div className="bg-green-50 rounded-lg shadow-lg p-4 border border-green-100 flex items-center space-x-3">
-            <div className="flex-shrink-0">
-              <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="fixed top-4 right-4 z-50 animate-slide-in">
+          <div className="bg-white rounded-lg shadow-xl p-4 border border-green-100 flex items-center space-x-3 max-w-md transform transition-all duration-300 hover:scale-105">
+            <div className="flex-shrink-0 bg-green-100 p-2 rounded-full">
+              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <p className="text-green-700">{successMessage}</p>
+            <div className="flex-1">
+              <p className="text-gray-800 font-medium">Success!</p>
+              <p className="text-gray-600 text-sm mt-1">{successMessage}</p>
+            </div>
             <button
               onClick={() => setShowSuccessToast(false)}
-              className="flex-shrink-0 text-green-400 hover:text-green-600"
+              className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors duration-200"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -249,6 +296,7 @@ function App() {
           <ChatHistory
             onSelectSession={handleSelectSession}
             onNewChat={handleNewChat}
+            currentSession={currentSession}
           />
         </div>
       )}
@@ -294,12 +342,38 @@ function App() {
                     type="file"
                     accept=".pdf"
                     onChange={handleFileChange}
-                    multiple
                     className="hidden"
                   />
                 </label>
               </div>
-              {files.length > 0 && (
+              {/* Separate Upload Button */}
+              <div className="mt-4 flex justify-center">
+                <button
+                  type="button"
+                  onClick={handleFileUpload}
+                  disabled={files.length === 0 || loading}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200 flex items-center space-x-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  {loading ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <span>Uploading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      <span>Upload</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              {/* Selected Files */}
+              {files && files.length > 0 && (
                 <div className="space-y-2">
                   {files.map((file, index) => (
                     <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
@@ -321,25 +395,40 @@ function App() {
                   ))}
                 </div>
               )}
-              <button
-                onClick={handleUpload}
-                disabled={files.length === 0 || loading}
-                className={`w-full py-2 px-4 rounded-lg text-white font-medium transition-all duration-200 ${
-                  files.length === 0 || loading
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700 shadow-md hover:shadow-lg'
-                }`}
-              >
-                {loading ? (
-                  <div className="flex items-center justify-center">
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Uploading...
+              {/* Uploaded Files */}
+              {uploadedFiles && uploadedFiles.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-sm font-medium text-gray-700 mb-3">Uploaded Files</h3>
+                  <div className="space-y-2">
+                    {uploadedFiles.map((file) => (
+                      <div key={file.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="flex items-center space-x-3">
+                          <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                          </svg>
+                          <div className="flex flex-col">
+                            <span className="text-sm text-gray-600 truncate">{file.filename}</span>
+                            <span className="text-xs text-gray-400">
+                              {file.pages} pages • {file.chunks} chunks
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setUploadedFiles(prev => prev.filter(f => f.id !== file.id));
+                            // You might want to add an API call here to delete the file from the backend
+                          }}
+                          className="text-gray-400 hover:text-gray-600 transition-colors duration-200"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ) : `Upload ${files.length} PDF${files.length !== 1 ? 's' : ''}`}
-              </button>
+                </div>
+              )}
               {error && (
                 <div className="text-red-500 text-sm mt-2 bg-red-50 p-3 rounded-lg border border-red-200">
                   {error}
@@ -352,7 +441,7 @@ function App() {
           <div className="flex-1 flex flex-col">
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {messages.map((msg, index) => (
+              {messages && messages.length > 0 && messages.map((msg, index) => (
                 <div
                   key={index}
                   className={`flex ${
@@ -374,6 +463,11 @@ function App() {
                   </div>
                 </div>
               ))}
+              {messages && messages.length === 0 && (
+                <div className="flex justify-center items-center h-full text-gray-500">
+                  No messages yet. Start the conversation!
+                </div>
+              )}
               {isTyping && (
                 <div className="flex justify-start">
                   <div className="bg-white rounded-lg p-4 shadow-sm">

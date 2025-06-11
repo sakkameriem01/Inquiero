@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Table, JSON
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Table, JSON, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -40,6 +40,7 @@ class Session(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     tags = Column(JSON, default=list)
     messages = Column(JSON, default=list)
+    pinned = Column(Boolean, default=False)
     files = relationship("File", secondary=session_files, back_populates="sessions")
 
 class File(Base):

@@ -1,45 +1,120 @@
 from langchain.chains import RetrievalQA
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_community.llms import Ollama
 from langchain.prompts import PromptTemplate
-from typing import Dict
-import os
-from dotenv import load_dotenv
+from typing import Dict, List, Optional
 import logging
 import time
+import json
+import re
+from datetime import datetime
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-load_dotenv()
+class ChatMessage:
+    def __init__(self, content: str, role: str, timestamp: Optional[datetime] = None):
+        self.content = content
+        self.role = role  # 'user' or 'assistant'
+        self.timestamp = timestamp or datetime.now()
+
+    def to_dict(self) -> Dict:
+        return {
+            'content': self.content,
+            'role': self.role,
+            'timestamp': self.timestamp.isoformat()
+        }
 
 class QASystem:
     def __init__(self):
-        api_key = os.getenv("GOOGLE_API_KEY")
-        if not api_key:
-            raise ValueError("GOOGLE_API_KEY environment variable is not set")
-        
         try:
-            self.llm = ChatGoogleGenerativeAI(
-                model="gemini-1.5-flash-latest",
-                google_api_key=api_key,
-                temperature=0,
-                convert_system_message_to_human=True,
-                max_retries=2,
-                timeout=15,
-                max_output_tokens=1024,
-                top_p=0.8,
-                top_k=40
+            self.llm = Ollama(
+                model="mistral",
+                temperature=0.1,  
+                timeout=30,
+                num_ctx=4096,
+                num_thread=4
             )
-            logger.info("Successfully initialized Gemini model")
+            logger.info("Successfully initialized Mistral model through Ollama")
         except Exception as e:
-            logger.error(f"Error initializing Gemini model: {str(e)}")
-            raise ValueError(f"Failed to initialize Gemini model: {str(e)}")
+            logger.error(f"Error initializing Mistral model: {str(e)}")
+            raise ValueError(f"Failed to initialize Mistral model: {str(e)}")
         
         self.qa_chain = None
         self.last_request_time = 0
-        self.min_request_interval = 2
+        self.min_request_interval = 1
         self.processed_files = {}
+        self.chat_history = {}  # session_id -> List[ChatMessage]
+        self.max_history_messages = 5  # Number of recent messages to include in context
+        self.vector_store = None
+
+    def preprocess_question(self, question: str) -> str:
+        """Preprocess the question to make it more robust and forgiving."""
+        # Remove extra whitespace
+        question = question.strip()
+        
+        # Fix common typos and patterns
+        common_typos = {
+            r'\?c': '?',  # Fix "?c" typo
+            r'\?s': '?',  # Fix "?s" typo
+            r'\?q': '?',  # Fix "?q" typo
+            r'\.\.\.': '...',  # Fix multiple dots
+            r'!!+': '!',  # Fix multiple exclamation marks
+            r'\?\?+': '?',  # Fix multiple question marks
+            r'\s+': ' ',  # Fix multiple spaces
+            r'wat': 'what',  # Common typos
+            r'wut': 'what',
+            r'pls': 'please',
+            r'thx': 'thanks',
+            r'u': 'you',
+            r'ur': 'your',
+            r'r': 'are',
+            r'btw': 'by the way',
+            r'afaik': 'as far as I know',
+            r'imo': 'in my opinion',
+            r'fyi': 'for your information',
+            r'idk': 'I don\'t know',
+            r'ty': 'thank you',
+            r'np': 'no problem',
+            r'omg': 'oh my god',
+            r'brb': 'be right back',
+            r'asap': 'as soon as possible',
+            r'atm': 'at the moment',
+            r'afaik': 'as far as I know',
+            r'imo': 'in my opinion',
+            r'fyi': 'for your information',
+            r'idk': 'I don\'t know',
+            r'ty': 'thank you',
+            r'np': 'no problem',
+            r'omg': 'oh my god',
+            r'brb': 'be right back',
+            r'asap': 'as soon as possible',
+            r'atm': 'at the moment',
+        }
+        
+        # Apply common typos fixes
+        for pattern, replacement in common_typos.items():
+            question = re.sub(r'\b' + pattern + r'\b', replacement, question, flags=re.IGNORECASE)
+        
+        # Fix punctuation
+        question = re.sub(r'([.!?])\1+', r'\1', question)  # Remove duplicate punctuation
+        if not question[-1] in '.!?':
+            question += '?'
+        
+        # Remove any remaining special characters that might interfere
+        question = re.sub(r'[^\w\s\?\.\!\-\'\"]', '', question)
+        
+        # Capitalize first letter
+        question = question[0].upper() + question[1:]
+        
+        # Fix common sentence structure issues
+        question = re.sub(r'\s+([.,!?])', r'\1', question)  # Remove spaces before punctuation
+        question = re.sub(r'([.,!?])(?=[^\s])', r'\1 ', question)  # Add space after punctuation if missing
+        
+        # Fix common word spacing issues
+        question = re.sub(r'\s+', ' ', question)  # Normalize spaces
+        
+        return question
 
     def create_qa_chain(self, vector_store):
         """Create a QA chain with the given vector store."""
@@ -47,52 +122,79 @@ class QASystem:
             raise ValueError("Vector store is required to create QA chain")
         
         try:
-            prompt_template = """You are an intelligent assistant that can analyze and compare information from multiple documents. 
-            Use the following pieces of context from different documents to answer the question at the end.
-            
-            If the question requires comparing information across documents, analyze the relationships and differences carefully.
-            If you don't know the answer or can't find relevant information, just say that you don't know.
-            Keep your answers concise and to the point.
-            
-            When referencing information, mention which document it comes from.
-            
-            Context from documents:
-            {context}
-            
-            Question: {question}
-            Answer:"""
+            self.vector_store = vector_store
+            from langchain.chains import ConversationalRetrievalChain
+            from langchain.memory import ConversationBufferMemory
 
-            PROMPT = PromptTemplate(
-                template=prompt_template, input_variables=["context", "question"]
+            # Create memory for chat history
+            memory = ConversationBufferMemory(
+                memory_key="chat_history",
+                return_messages=True,
+                output_key="answer"  # Explicitly set which key to store in memory
             )
 
-            self.qa_chain = RetrievalQA.from_chain_type(
+            # Create the chain
+            self.qa_chain = ConversationalRetrievalChain.from_llm(
                 llm=self.llm,
-                chain_type="stuff",
                 retriever=vector_store.as_retriever(
-                    search_kwargs={
-                        "k": 6,  # Increased to get more context from different documents
-                        "fetch_k": 20,  # Fetch more documents initially
-                        "maximal_marginal_relevance": True,  # Ensure diverse document selection
-                        "filter": None  # No filtering, get from all documents
-                    }
+                    search_kwargs={"k": 6}
                 ),
+                memory=memory,
                 return_source_documents=True,
-                chain_type_kwargs={"prompt": PROMPT}
+                verbose=True
             )
+            
             logger.info("Successfully created QA chain")
         except Exception as e:
             self.qa_chain = None
             logger.error(f"Error creating QA chain: {str(e)}")
             raise ValueError(f"Error creating QA chain: {str(e)}")
 
-    def get_answer(self, question: str) -> Dict[str, str]:
+    def is_initialized(self):
+        """Check if the QA system is properly initialized."""
+        return self.qa_chain is not None and self.vector_store is not None
+
+    def get_chat_history_context(self, session_id: str) -> str:
+        """Get formatted chat history context for the prompt."""
+        if session_id not in self.chat_history:
+            return ""
+        
+        messages = self.chat_history[session_id][-self.max_history_messages:]
+        context = "\nRecent conversation:\n"
+        
+        for msg in messages:
+            role = "User" if msg.role == "user" else "Assistant"
+            context += f"{role}: {msg.content}\n"
+        
+        return context
+
+    def add_to_chat_history(self, session_id: str, message: ChatMessage):
+        """Add a message to the chat history."""
+        if session_id not in self.chat_history:
+            self.chat_history[session_id] = []
+        self.chat_history[session_id].append(message)
+
+    def clear_chat_history(self, session_id: str):
+        """Clear chat history for a specific session."""
+        if session_id in self.chat_history:
+            del self.chat_history[session_id]
+
+    def get_answer(self, question: str, session_id: Optional[str] = None) -> Dict[str, str]:
         """Get answer for a question using combined knowledge from all documents."""
         if not question.strip():
             raise ValueError("Question cannot be empty")
             
-        if not self.qa_chain:
+        if not self.is_initialized():
             raise ValueError("QA chain not initialized. Please process PDFs first.")
+        
+        # Preprocess the question
+        processed_question = self.preprocess_question(question)
+        logger.info(f"Original question: {question}")
+        logger.info(f"Processed question: {processed_question}")
+        
+        # Add user message to chat history
+        if session_id:
+            self.add_to_chat_history(session_id, ChatMessage(processed_question, "user"))
         
         # Rate limiting
         current_time = time.time()
@@ -103,13 +205,35 @@ class QASystem:
             time.sleep(sleep_time)
         
         try:
-            logger.info(f"Processing question: {question}")
+            logger.info(f"Processing question: {processed_question}")
             self.last_request_time = time.time()
-            result = self.qa_chain.invoke({"query": question})
+            
+            # Get chat history context
+            chat_history = self.get_chat_history_context(session_id) if session_id else ""
+            
+            # Invoke the QA chain with just the question
+            result = self.qa_chain({"question": processed_question})
+            
+            # Extract and process the answer
+            answer = result.get("answer", "")
+            if not answer:
+                answer = "I couldn't find a specific answer to your question in the provided documents. Could you please rephrase your question or provide more context?"
+            
+            # Ensure answer is a string
+            if isinstance(answer, dict):
+                answer = json.dumps(answer, ensure_ascii=False, indent=2)
+            elif not isinstance(answer, str):
+                answer = str(answer)
+            
+            answer = answer.strip()
+            
+            # Add assistant's response to chat history
+            if session_id:
+                self.add_to_chat_history(session_id, ChatMessage(answer, "assistant"))
             
             # Process source documents to include file information
             sources = []
-            for doc in result["source_documents"]:
+            for doc in result.get("source_documents", []):
                 source_info = {
                     "text": doc.page_content,
                     "source": doc.metadata.get("source", "Unknown document"),
@@ -119,14 +243,11 @@ class QASystem:
             
             logger.info("Successfully generated answer")
             return {
-                "answer": result["result"],
+                "answer": answer,
                 "sources": sources
             }
         except Exception as e:
             error_msg = str(e)
-            if "429" in error_msg:
-                logger.error("Rate limit exceeded. Please try again in a few minutes.")
-                raise ValueError("Rate limit exceeded. Please try again in a few minutes.")
             logger.error(f"Error getting answer: {error_msg}")
             raise ValueError(f"Error getting answer: {error_msg}")
 

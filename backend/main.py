@@ -5,18 +5,17 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 import os
 from dotenv import load_dotenv
-from utils.pdf_loader import PDFProcessor, process_pdf
+from utils.pdf_loader import PDFProcessor
 from utils.qa_chain import QASystem
-from models import ChatSession, Message
-import shutil
+from models import Session, File as DBFile, ChatSession as ChatSessionModel
 import logging
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 from pydantic import BaseModel
 from datetime import datetime
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session as DBSession
 from database import get_db, engine
-from models import Base, Session as DBSession, File as DBFile
+from models import Base
 
 # Load environment variables
 load_dotenv()
@@ -51,7 +50,7 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 Base.metadata.create_all(bind=engine)
 
 # In-memory storage for chat sessions (replace with database in production)
-chat_sessions: Dict[str, ChatSession] = {}
+chat_sessions: Dict[str, ChatSessionModel] = {}
 
 class ChatRequest(BaseModel):
     question: str
@@ -71,85 +70,127 @@ async def root():
     return {"message": "Welcome to Inquiero API"}
 
 @app.post("/upload/")
-async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    """Upload and process a PDF file."""
+async def upload_file(
+    file: UploadFile = File(),
+    session_id: Optional[int] = None,
+    db: DBSession = Depends(get_db)
+):
     try:
+        # Validate file type
         if not file.filename.lower().endswith('.pdf'):
             raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+
+        # Create uploads directory if it doesn't exist
+        os.makedirs("uploads", exist_ok=True)
+
+        # Generate unique filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        original_filename = file.filename
+        filename = f"{timestamp}_{original_filename}"
         
-        # Save the uploaded file
-        file_path = UPLOAD_DIR / file.filename
-        with file_path.open("wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
+        # Save the file
+        file_path = os.path.join("uploads", filename)
+        with open(file_path, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
+
         # Process the PDF
-        try:
-            chunks, pages = process_pdf(str(file_path))
-            
-            # Save file info to database
-            db_file = DBFile(
-                filename=file.filename,
-                original_filename=file.filename,
-                chunks=chunks,
-                pages=pages
-            )
-            db.add(db_file)
+        result = pdf_processor.process_pdf(file_path, filename)
+        chunks_count = result["chunks"]
+        pages_count = result["pages"]
+
+        # Initialize QA chain with the vector store
+        qa_system.create_qa_chain(pdf_processor.vector_store)
+
+        # Save file info to database
+        db_file = DBFile(
+            filename=filename,
+            original_filename=original_filename,
+            chunks=chunks_count,
+            pages=pages_count
+        )
+        db.add(db_file)
+        db.flush()  # Get the file ID without committing
+
+        # If session_id is provided, link the file to the session
+        if session_id:
+            session = db.query(Session).filter(Session.id == session_id).first()
+            if session:
+                session.files.append(db_file)
+                db.commit()
+            else:
+                db.rollback()
+                raise HTTPException(status_code=404, detail="Session not found")
+        else:
             db.commit()
-            db.refresh(db_file)
-            
-            # Update QA system with processed files info
-            qa_system.update_processed_files(pdf_processor.get_processed_files())
-            
-            # Create QA chain if not exists
-            if not qa_system.qa_chain:
-                qa_system.create_qa_chain(pdf_processor.vector_store)
-            
-            return {
-                "message": "File processed successfully",
-                "filename": file.filename,
-                "chunks": chunks,
-                "pages": pages
-            }
-        except Exception as e:
-            # Clean up the file if processing fails
-            if file_path.exists():
-                file_path.unlink()
-            raise e
-                
+
+        return {
+            "message": "File uploaded successfully",
+            "file_id": db_file.id,
+            "filename": filename,
+            "original_filename": original_filename,
+            "chunks": chunks_count,
+            "pages": pages_count
+        }
+
     except Exception as e:
-        logger.error(f"Error processing file: {str(e)}")
+        logger.error(f"Error uploading file: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat/")
-async def chat(question: str, session_id: Optional[int] = None, tags: List[str] = [], db: Session = Depends(get_db)):
+async def chat(request: ChatRequest = Body(...), db: DBSession = Depends(get_db)):
     """Get answer for a question and manage chat session."""
     try:
-        # Get or create session
-        if session_id:
-            db_session = db.query(DBSession).filter(DBSession.id == session_id).first()
+        # Check if QA chain is initialized
+        if not qa_system.qa_chain:
+            raise HTTPException(
+                status_code=400,
+                detail="Please upload a PDF file first to initialize the QA system."
+            )
+
+        # Get existing session or create new one only if no session_id provided
+        if request.session_id:
+            db_session = db.query(Session).filter(Session.id == request.session_id).first()
             if not db_session:
                 raise HTTPException(status_code=404, detail="Session not found")
         else:
-            db_session = DBSession(
-                title=question[:50] + "..." if len(question) > 50 else question,
-                tags=tags,
-                messages=[]
+            # Create new session only if no session_id provided
+            db_session = Session(
+                title=request.question[:50] + "..." if len(request.question) > 50 else request.question,
+                tags=request.tags or [],
+                messages=[]  # Initialize empty messages array
             )
             db.add(db_session)
             db.commit()
             db.refresh(db_session)
         
-        # Get answer from QA system
-        result = qa_system.get_answer(question)
+        try:
+            # Get answer from QA system
+            result = qa_system.get_answer(request.question, str(db_session.id))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            logger.error(f"Error getting answer from QA system: {str(e)}")
+            raise HTTPException(status_code=500, detail="Failed to generate answer. Please try again.")
+        
+        # Create new messages
+        new_messages = [
+            {"type": "user", "content": request.question},
+            {"type": "assistant", "content": result["answer"]}
+        ]
         
         # Update session with new messages
-        messages = db_session.messages or []
-        messages.extend([
-            {"type": "user", "content": question},
-            {"type": "assistant", "content": result["answer"]}
-        ])
-        db_session.messages = messages
+        if not db_session.messages:
+            db_session.messages = new_messages
+        else:
+            db_session.messages.extend(new_messages)
+        
+        # Update session title if it's a new session
+        if not request.session_id:
+            db_session.title = request.question[:50] + "..." if len(request.question) > 50 else request.question
+        
         db.commit()
+        db.refresh(db_session)
         
         return {
             "answer": result["answer"],
@@ -162,33 +203,40 @@ async def chat(question: str, session_id: Optional[int] = None, tags: List[str] 
                 "updated_at": db_session.updated_at.isoformat()
             }
         }
+    except HTTPException as he:
+        raise he
     except Exception as e:
-        logger.error(f"Error getting answer: {str(e)}")
+        logger.error(f"Error in chat endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/sessions/")
-async def get_sessions(db: Session = Depends(get_db)):
-    sessions = db.query(DBSession).all()
-    return [
-        {
-            "id": session.id,
-            "title": session.title,
-            "tags": session.tags,
-            "messages": session.messages,
-            "created_at": session.created_at.isoformat(),
-            "updated_at": session.updated_at.isoformat(),
-            "files": [
-                {
-                    "id": file.id,
-                    "filename": file.original_filename,
-                    "chunks": file.chunks,
-                    "pages": file.pages
-                }
-                for file in session.files
-            ]
-        }
-        for session in sessions
-    ]
+async def get_sessions(db: DBSession = Depends(get_db)):
+    try:
+        sessions = db.query(Session).order_by(Session.updated_at.desc()).all()
+        return [
+            {
+                "id": session.id,
+                "title": session.title,
+                "created_at": session.created_at.isoformat(),
+                "updated_at": session.updated_at.isoformat(),
+                "pinned": session.pinned,
+                "files": [
+                    {
+                        "id": file.id,
+                        "filename": file.filename,
+                        "original_filename": file.original_filename,
+                        "file_type": "pdf",
+                        "chunk_count": file.chunks,
+                        "page_count": file.pages
+                    }
+                    for file in session.files
+                ]
+            }
+            for session in sessions
+        ]
+    except Exception as e:
+        logger.error(f"Error getting sessions: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/chat-sessions/")
 async def get_chat_sessions(search: Optional[str] = None, tag: Optional[str] = None):
@@ -202,7 +250,7 @@ async def get_chat_sessions(search: Optional[str] = None, tag: Optional[str] = N
             sessions = [
                 s for s in sessions
                 if search in s.title.lower() or
-                any(search in msg.content.lower() for msg in s.messages)
+                any(search in msg.content.lower() for msg in s.files)
             ]
         
         # Filter by tag
@@ -218,48 +266,95 @@ async def get_chat_sessions(search: Optional[str] = None, tag: Optional[str] = N
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/chat-sessions/{session_id}")
-async def get_chat_session(session_id: str):
+async def get_chat_session(session_id: int, db: DBSession = Depends(get_db)):
     """Get a specific chat session."""
     try:
-        if session_id not in chat_sessions:
-            raise HTTPException(status_code=404, detail="Chat session not found")
-        return chat_sessions[session_id].dict()
-    except Exception as e:
-        logger.error(f"Error getting chat session: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.put("/chat-sessions/{session_id}")
-async def update_chat_session(session_id: str, updates: dict):
-    """Update chat session title or tags."""
-    try:
-        if session_id not in chat_sessions:
+        logger.info(f"Fetching chat session with ID: {session_id}")
+        
+        # Query the session from the database
+        db_session = db.query(Session).filter(Session.id == session_id).first()
+        
+        if not db_session:
+            logger.warning(f"Session not found with ID: {session_id}")
             raise HTTPException(status_code=404, detail="Chat session not found")
         
-        session = chat_sessions[session_id]
+        # Convert the session to a response format
+        response = {
+            "id": db_session.id,
+            "title": db_session.title,
+            "tags": db_session.tags,
+            "messages": db_session.messages,
+            "created_at": db_session.created_at.isoformat(),
+            "updated_at": db_session.updated_at.isoformat(),
+            "pinned": db_session.pinned,
+            "files": [
+                {
+                    "id": file.id,
+                    "filename": file.filename,
+                    "original_filename": file.original_filename,
+                    "file_type": "pdf",
+                    "chunk_count": file.chunks,
+                    "page_count": file.pages
+                }
+                for file in db_session.files
+            ]
+        }
+        
+        logger.info(f"Successfully retrieved session: {session_id}")
+        return response
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error getting chat session {session_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.put("/chat-sessions/{session_id}")
+async def update_chat_session(session_id: int, updates: dict, db: DBSession = Depends(get_db)):
+    """Update chat session title, tags, or pinned status."""
+    try:
+        db_session = db.query(Session).filter(Session.id == session_id).first()
+        if not db_session:
+            raise HTTPException(status_code=404, detail="Chat session not found")
         
         # Update fields
         if "title" in updates:
-            session.title = updates["title"]
+            db_session.title = updates["title"]
         if "tags" in updates:
-            session.tags = updates["tags"]
+            db_session.tags = updates["tags"]
         if "pinned" in updates:
-            session.pinned = updates["pinned"]
+            db_session.pinned = updates["pinned"]
         
-        session.updated_at = datetime.now()
+        db_session.updated_at = datetime.now()
+        db.commit()
+        db.refresh(db_session)
         
-        return session.dict()
+        return {
+            "id": db_session.id,
+            "title": db_session.title,
+            "tags": db_session.tags,
+            "messages": db_session.files,
+            "created_at": db_session.created_at.isoformat(),
+            "updated_at": db_session.updated_at.isoformat(),
+            "pinned": db_session.pinned
+        }
     except Exception as e:
         logger.error(f"Error updating chat session: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/chat-sessions/{session_id}")
-async def delete_chat_session(session_id: str):
-    """Delete a chat session."""
+async def delete_chat_session(session_id: int, db: DBSession = Depends(get_db)):
+    """Delete a chat session from the database."""
     try:
-        if session_id not in chat_sessions:
+        # Find the session in the database
+        db_session = db.query(Session).filter(Session.id == session_id).first()
+        if not db_session:
             raise HTTPException(status_code=404, detail="Chat session not found")
         
-        del chat_sessions[session_id]
+        # Delete the session
+        db.delete(db_session)
+        db.commit()
+        
         return {"message": "Chat session deleted successfully"}
     except Exception as e:
         logger.error(f"Error deleting chat session: {str(e)}")
@@ -280,7 +375,7 @@ async def get_processed_files():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/files/")
-async def clear_files(db: Session = Depends(get_db)):
+async def clear_files(db: DBSession = Depends(get_db)):
     """Clear all processed files and vector store."""
     try:
         # Clear files from database

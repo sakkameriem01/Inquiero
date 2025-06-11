@@ -1,105 +1,123 @@
-# Inquiero
+# Inquiero - AI-Powered PDF Document Q&A System
 
-An intelligent PDF chat application that allows users to upload PDF documents and ask questions about their content using a **locally hosted Mistral model via Ollama**.
+Inquiero is an intelligent document Q&A system that allows users to upload PDF documents and ask questions about their content. The system uses advanced AI and natural language processing to provide accurate answers based on the document context.
 
 ## Features
 
-- PDF document upload and processing
-- Intelligent question answering using Mistral (via Ollama)
-- Local text embedding for efficient document search
-- Modern web interface
-- Real-time chat interaction
+- 📄 **PDF Document Processing**: Upload and process multiple PDF documents
+- 💬 **Interactive Chat Interface**: Ask questions about your documents in natural language
+- 🔍 **Context-Aware Responses**: Get answers based on the actual content of your documents
+- 📚 **Chat History**: Save and manage your conversations
+- 📱 **Modern UI**: Clean and responsive user interface
+- 🔒 **Session Management**: Maintain context across conversations
+- 📌 **Favorite Chats**: Pin important conversations for quick access
+
+## Tech Stack
+
+### Frontend
+- React.js
+- Tailwind CSS
+- Modern UI components
+
+### Backend
+- FastAPI
+- LangChain
+- ChromaDB (Vector Store)
+- HuggingFace Transformers
+- SQLAlchemy
+- PostgreSQL/SQLite
 
 ## Prerequisites
 
-- Python 3.8 or higher
-- Node.js 14 or higher (for frontend)
-- [Ollama](https://ollama.com) installed with Mistral model downloaded locally
+- Python 3.8+
+- Node.js 14+
+- PostgreSQL (optional, SQLite is used as fallback)
 
 ## Installation
 
-1. Clone the repository:
+### Backend Setup
+
+1. Create and activate a virtual environment:
 ```bash
-git clone https://github.com/sakkameriem01/inquiero.git
-cd inquiero
+# Windows
+python -m venv venv
+.\venv\Scripts\activate
+
+# Linux/Mac
+python3 -m venv venv
+source venv/bin/activate
 ```
 
-2. Set up the backend:
+2. Install dependencies:
 ```bash
 cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-3. Set up the frontend:
+3. Set up environment variables:
+Create a `.env` file in the backend directory:
+```env
+DATABASE_URL=postgresql://user:password@localhost:5432/inquiero
+# Or use SQLite (default)
+# DATABASE_URL=sqlite:///./chat_history.db
+```
+
+4. Run database migrations:
+```bash
+alembic upgrade head
+```
+
+5. Start the backend server:
+```bash
+python main.py
+```
+
+### Frontend Setup
+
+1. Install dependencies:
 ```bash
 cd frontend
 npm install
 ```
 
-4. Create a `.env` file in the backend directory:
-```
-GOOGLE_API_KEY=your_google_api_key_here
-DATABASE_URL=sqlite:///./chat_history.db
-```
-
-## Running the Application
-
-1. Start the backend server:
+2. Start the development server:
 ```bash
-cd backend
-python main.py
-```
-
-2. Start the frontend development server:
-```bash
-cd frontend
 npm start
 ```
 
-3. Open your browser and navigate to `http://localhost:3000`
-
 ## Usage
 
-1. Easily upload single or multiple PDF documents.
-2. Wait for the document to be processed
-3. Start asking questions about the document's content
-4. View the AI-generated answers
+1. Open your browser and navigate to `http://localhost:3000`
+2. Upload one or more PDF documents
+3. Wait for the documents to be processed
+4. Start asking questions about the content
+5. View your chat history and manage conversations
 
 ## Project Structure
 
 ```
 inquiero/
 ├── backend/
-│   ├── utils/
-│   │   ├── pdf_loader.py    # PDF processing and text extraction
-│   │   └── qa_chain.py      # Question answering system
-│   ├── main.py             # FastAPI server
-│   ├── requirements.txt    # Python dependencies
-│   ├── database.py         # Database connection and session management
-│   └── models.py           # Database models
+│   ├── main.py              # FastAPI application
+│   ├── database.py          # Database configuration
+│   ├── models.py            # SQLAlchemy models
+│   ├── requirements.txt     # Python dependencies
+│   └── utils/
+│       ├── pdf_loader.py    # PDF processing utilities
+│       └── qa_chain.py      # QA system implementation
 ├── frontend/
 │   ├── src/
-│   │   ├── components/     # React components
-│   │   └── App.js          # Main application component
-│   └── package.json       # Node.js dependencies
+│   │   ├── components/      # React components
+│   │   ├── App.js          # Main application
+│   │   └── index.js        # Entry point
+│   └── package.json        # Node.js dependencies
 └── README.md
-```
+``
 
-## Dependencies
+## Acknowledgments
 
-### Backend
-- FastAPI
-- LangChain
-- Ollama + Mistral (local model)
-- FAISS
-- Sentence Transformers
-- PyPDF2
-
-### Frontend
-- React
-- TypeScript
-- Tailwind CSS
-- Axios
+- LangChain for the QA framework
+- HuggingFace for the transformer models
+- FastAPI for the backend framework
+- React and Tailwind CSS for the frontend
 

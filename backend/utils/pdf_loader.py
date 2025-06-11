@@ -1,8 +1,8 @@
 from typing import List, Dict
 from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS, Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores import Chroma
 from dotenv import load_dotenv
 import logging
 
@@ -69,22 +69,23 @@ class PDFProcessor:
         } for i, chunk in enumerate(chunks)]
 
     def create_vector_store(self, chunks_with_metadata: List[Dict[str, str]]):
-        """Create or update FAISS vector store from text chunks with metadata."""
+        """Create or update Chroma vector store from text chunks with metadata."""
         if not chunks_with_metadata:
             raise ValueError("No chunks provided for vector store creation")
         
         try:
-            # Extract just the text for FAISS
+            # Extract just the text for Chroma
             texts = [chunk["text"] for chunk in chunks_with_metadata]
             metadatas = [{"source": chunk["source"], "chunk_index": chunk["chunk_index"]} 
                         for chunk in chunks_with_metadata]
             
             if self.vector_store is None:
                 # Create new vector store
-                self.vector_store = FAISS.from_texts(
+                self.vector_store = Chroma.from_texts(
                     texts, 
                     self.embeddings,
-                    metadatas=metadatas
+                    metadatas=metadatas,
+                    persist_directory="./chroma_db"
                 )
             else:
                 # Add to existing vector store
@@ -115,14 +116,17 @@ class PDFProcessor:
                 self.vector_store = Chroma.from_texts(
                     chunks,
                     self.embeddings,
-                    metadatas=[{"source": filename, "chunk_index": i} for i in range(len(chunks))]
+                    metadatas=[{"source": filename, "chunk_index": i} for i in range(len(chunks))],
+                    persist_directory="./chroma_db"
                 )
+                logger.info(f"Created new vector store with {len(chunks)} chunks")
             else:
                 # Update the existing vector store
                 self.vector_store.add_texts(
                     chunks,
                     metadatas=[{"source": filename, "chunk_index": i} for i in range(len(chunks))]
                 )
+                logger.info(f"Added {len(chunks)} chunks to existing vector store")
 
             # Update processed files info
             self.processed_files[filename] = {
