@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class ChatMessage:
     def __init__(self, content: str, role: str, timestamp: Optional[datetime] = None):
         self.content = content
-        self.role = role  # 'user' or 'assistant'
+        self.role = role  
         self.timestamp = timestamp or datetime.now()
 
     def to_dict(self) -> Dict:
@@ -27,23 +27,10 @@ class ChatMessage:
 
 class QASystem:
     def __init__(self):
-        try:
-            self.llm = Ollama(
-                model="mistral",
-                temperature=0.1,  
-                timeout=30,
-                num_ctx=4096,
-                num_thread=4
-            )
-            logger.info("Successfully initialized Mistral model through Ollama")
-        except Exception as e:
-            logger.error(f"Error initializing Mistral model: {str(e)}")
-            raise ValueError(f"Failed to initialize Mistral model: {str(e)}")
-        
-        self.qa_chain = None
+        self.qa_chains = {}  # session_id -> qa_chain
+        self.processed_files = {}  # session_id -> set of processed files
         self.last_request_time = 0
         self.min_request_interval = 1
-        self.processed_files = {}
         self.chat_history = {}  # session_id -> List[ChatMessage]
         self.max_history_messages = 5  # Number of recent messages to include in context
         self.vector_store = None
@@ -116,43 +103,100 @@ class QASystem:
         
         return question
 
-    def create_qa_chain(self, vector_store):
-        """Create a QA chain with the given vector store."""
+    def create_qa_chain(self, vector_store, session_id: str):
+        """Create a QA chain for a specific session."""
         if not vector_store:
             raise ValueError("Vector store is required to create QA chain")
-        
+
+        # Create a custom prompt template
+        template = """Use the following pieces of context to answer the question at the end. 
+        If you don't know the answer, just say that you don't know, don't try to make up an answer.
+        Use three sentences maximum and keep the answer concise.
+
+        Context: {context}
+
+        Question: {question}
+
+        Answer:"""
+
+        QA_CHAIN_PROMPT = PromptTemplate(
+            template=template,
+            input_variables=["context", "question"]
+        )
+
+        # Initialize Ollama with Mistral model
+        llm = Ollama(
+            model="mistral",
+            temperature=0.1,
+            num_ctx=4096,  # Context window size
+            num_thread=4,  # Number of CPU threads to use
+            repeat_penalty=1.1,  # Penalty for repeating tokens
+            top_k=40,  # Number of tokens to consider for each prediction
+            top_p=0.9  # Nucleus sampling parameter
+        )
+
+        # Create a new QA chain for this session
+        self.qa_chains[session_id] = RetrievalQA.from_chain_type(
+            llm=llm,
+            chain_type="stuff",
+            retriever=vector_store.as_retriever(search_kwargs={"k": 4}),
+            return_source_documents=True,
+            chain_type_kwargs={"prompt": QA_CHAIN_PROMPT}
+        )
+        logger.info(f"Created new QA chain for session {session_id} using Mistral model")
+
+    def get_answer(self, question: str, session_id: str) -> dict:
+        """Get answer for a question using session-specific QA chain."""
+        if not question.strip():
+            raise ValueError("Question cannot be empty")
+
+        if session_id not in self.qa_chains:
+            raise ValueError(f"No QA chain available for session {session_id}. Please process PDFs first.")
+
         try:
-            self.vector_store = vector_store
-            from langchain.chains import ConversationalRetrievalChain
-            from langchain.memory import ConversationBufferMemory
-
-            # Create memory for chat history
-            memory = ConversationBufferMemory(
-                memory_key="chat_history",
-                return_messages=True,
-                output_key="answer"  # Explicitly set which key to store in memory
-            )
-
-            # Create the chain
-            self.qa_chain = ConversationalRetrievalChain.from_llm(
-                llm=self.llm,
-                retriever=vector_store.as_retriever(
-                    search_kwargs={"k": 6}
-                ),
-                memory=memory,
-                return_source_documents=True,
-                verbose=True
-            )
+            # Get answer from session-specific QA chain
+            result = self.qa_chains[session_id]({"query": question})
             
-            logger.info("Successfully created QA chain")
-        except Exception as e:
-            self.qa_chain = None
-            logger.error(f"Error creating QA chain: {str(e)}")
-            raise ValueError(f"Error creating QA chain: {str(e)}")
+            # Extract answer and source documents
+            answer = result.get("result", "")
+            source_docs = result.get("source_documents", [])
 
-    def is_initialized(self):
-        """Check if the QA system is properly initialized."""
-        return self.qa_chain is not None and self.vector_store is not None
+            # Process source documents
+            sources = []
+            for doc in source_docs:
+                if hasattr(doc, "metadata"):
+                    sources.append({
+                        "text": doc.page_content,
+                        "source": doc.metadata.get("source", "Unknown"),
+                        "chunk_index": doc.metadata.get("chunk_index", -1)
+                    })
+
+            return {
+                "answer": answer,
+                "sources": sources
+            }
+
+        except Exception as e:
+            logger.error(f"Error getting answer for session {session_id}: {str(e)}")
+            raise ValueError(f"Failed to get answer: {str(e)}")
+
+    def is_initialized(self, session_id: str) -> bool:
+        """Check if QA chain is initialized for a session."""
+        return session_id in self.qa_chains
+
+    def clear_session(self, session_id: str):
+        """Clear QA chain for a specific session."""
+        if session_id in self.qa_chains:
+            del self.qa_chains[session_id]
+        if session_id in self.processed_files:
+            del self.processed_files[session_id]
+        logger.info(f"Cleared QA chain for session {session_id}")
+
+    def clear_all(self):
+        """Clear all QA chains."""
+        self.qa_chains = {}
+        self.processed_files = {}
+        logger.info("All QA chains cleared")
 
     def get_chat_history_context(self, session_id: str) -> str:
         """Get formatted chat history context for the prompt."""
@@ -173,83 +217,6 @@ class QASystem:
         if session_id not in self.chat_history:
             self.chat_history[session_id] = []
         self.chat_history[session_id].append(message)
-
-    def clear_chat_history(self, session_id: str):
-        """Clear chat history for a specific session."""
-        if session_id in self.chat_history:
-            del self.chat_history[session_id]
-
-    def get_answer(self, question: str, session_id: Optional[str] = None) -> Dict[str, str]:
-        """Get answer for a question using combined knowledge from all documents."""
-        if not question.strip():
-            raise ValueError("Question cannot be empty")
-            
-        if not self.is_initialized():
-            raise ValueError("QA chain not initialized. Please process PDFs first.")
-        
-        # Preprocess the question
-        processed_question = self.preprocess_question(question)
-        logger.info(f"Original question: {question}")
-        logger.info(f"Processed question: {processed_question}")
-        
-        # Add user message to chat history
-        if session_id:
-            self.add_to_chat_history(session_id, ChatMessage(processed_question, "user"))
-        
-        # Rate limiting
-        current_time = time.time()
-        time_since_last_request = current_time - self.last_request_time
-        if time_since_last_request < self.min_request_interval:
-            sleep_time = self.min_request_interval - time_since_last_request
-            logger.info(f"Rate limiting: waiting {sleep_time:.2f} seconds")
-            time.sleep(sleep_time)
-        
-        try:
-            logger.info(f"Processing question: {processed_question}")
-            self.last_request_time = time.time()
-            
-            # Get chat history context
-            chat_history = self.get_chat_history_context(session_id) if session_id else ""
-            
-            # Invoke the QA chain with just the question
-            result = self.qa_chain({"question": processed_question})
-            
-            # Extract and process the answer
-            answer = result.get("answer", "")
-            if not answer:
-                answer = "I couldn't find a specific answer to your question in the provided documents. Could you please rephrase your question or provide more context?"
-            
-            # Ensure answer is a string
-            if isinstance(answer, dict):
-                answer = json.dumps(answer, ensure_ascii=False, indent=2)
-            elif not isinstance(answer, str):
-                answer = str(answer)
-            
-            answer = answer.strip()
-            
-            # Add assistant's response to chat history
-            if session_id:
-                self.add_to_chat_history(session_id, ChatMessage(answer, "assistant"))
-            
-            # Process source documents to include file information
-            sources = []
-            for doc in result.get("source_documents", []):
-                source_info = {
-                    "text": doc.page_content,
-                    "source": doc.metadata.get("source", "Unknown document"),
-                    "chunk_index": doc.metadata.get("chunk_index", 0)
-                }
-                sources.append(source_info)
-            
-            logger.info("Successfully generated answer")
-            return {
-                "answer": answer,
-                "sources": sources
-            }
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Error getting answer: {error_msg}")
-            raise ValueError(f"Error getting answer: {error_msg}")
 
     def update_processed_files(self, files_info: Dict[str, Dict[str, int]]):
         """Update the list of processed files."""

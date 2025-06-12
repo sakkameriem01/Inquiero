@@ -25,145 +25,124 @@ class PDFProcessor:
             chunk_overlap=200,
             length_function=len
         )
-        self.vector_store = None
-        self.processed_files = {}  
+        self.vector_stores = {}  # session_id -> vector_store
+        self.processed_files = {}  # session_id -> {filename: {chunks, pages}}
 
-    def extract_text_from_pdf(self, file_path: str, file_name: str) -> Dict[str, str]:
-        """Extract text from PDF file and return with metadata."""
+    def get_session_vector_store(self, session_id: str):
+        """Get or create a vector store for a specific session."""
+        if session_id not in self.vector_stores:
+            self.vector_stores[session_id] = None
+        return self.vector_stores[session_id]
+
+    def process_pdf(self, file_path: str, filename: str, session_id: str) -> dict:
+        """Process a PDF file and return chunks and pages info for a specific session."""
         try:
+            logger.info(f"Starting PDF processing for {filename} in session {session_id}")
+            
+            # Read PDF
             reader = PdfReader(file_path)
             if len(reader.pages) == 0:
-                raise ValueError(f"PDF file '{file_name}' is empty")
+                raise ValueError(f"PDF file '{filename}' is empty")
             
+            logger.info(f"PDF loaded successfully: {len(reader.pages)} pages found")
+            
+            # Extract text from each page
             text = ""
-            for page in reader.pages:
+            for i, page in enumerate(reader.pages):
                 page_text = page.extract_text()
                 if page_text:
                     text += page_text + "\n"
-            
+                    logger.info(f"Extracted text from page {i+1}: {len(page_text)} characters")
+                else:
+                    logger.warning(f"No text extracted from page {i+1}")
+
             if not text.strip():
-                raise ValueError(f"No text could be extracted from '{file_name}'")
+                raise ValueError(f"No text could be extracted from '{filename}'")
             
-            return {
-                "text": text,
-                "name": file_name,
-                "pages": len(reader.pages)
-            }
-        except Exception as e:
-            raise ValueError(f"Error extracting text from '{file_name}': {str(e)}")
-
-    def chunk_text(self, text: str, file_name: str) -> List[Dict[str, str]]:
-        """Split text into chunks with metadata."""
-        if not text.strip():
-            raise ValueError(f"No text to chunk from '{file_name}'")
-        
-        chunks = self.text_splitter.split_text(text)
-        if not chunks:
-            raise ValueError(f"No chunks could be created from '{file_name}'")
-        
-        # Add metadata to each chunk
-        return [{
-            "text": chunk,
-            "source": file_name,
-            "chunk_index": i
-        } for i, chunk in enumerate(chunks)]
-
-    def create_vector_store(self, chunks_with_metadata: List[Dict[str, str]]):
-        """Create or update Chroma vector store from text chunks with metadata."""
-        if not chunks_with_metadata:
-            raise ValueError("No chunks provided for vector store creation")
-        
-        try:
-            # Extract just the text for Chroma
-            texts = [chunk["text"] for chunk in chunks_with_metadata]
-            metadatas = [{"source": chunk["source"], "chunk_index": chunk["chunk_index"]} 
-                        for chunk in chunks_with_metadata]
-            
-            if self.vector_store is None:
-                # Create new vector store
-                self.vector_store = Chroma.from_texts(
-                    texts, 
-                    self.embeddings,
-                    metadatas=metadatas,
-                    persist_directory="./chroma_db"
-                )
-            else:
-                # Add to existing vector store
-                self.vector_store.add_texts(
-                    texts,
-                    metadatas=metadatas
-                )
-            
-            logger.info(f"Successfully updated vector store with {len(texts)} new chunks")
-        except Exception as e:
-            raise ValueError(f"Error creating/updating vector store: {str(e)}")
-
-    def process_pdf(self, file_path: str, filename: str) -> dict:
-        """Process a PDF file and return chunks and pages info."""
-        try:
-            # Read PDF
-            reader = PdfReader(file_path)
-            text = ""
-            for page in reader.pages:
-                text += page.extract_text() + "\n"
+            logger.info(f"Total text extracted: {len(text)} characters")
 
             # Split text into chunks
             chunks = self.text_splitter.split_text(text)
+            logger.info(f"Text split into {len(chunks)} chunks")
             
-            # Create or update vector store
-            if self.vector_store is None:
-                # Create a new vector store
-                self.vector_store = Chroma.from_texts(
+            # Initialize session's processed files if not exists
+            if session_id not in self.processed_files:
+                self.processed_files[session_id] = {}
+            
+            # Create or update vector store for this session
+            if self.vector_stores.get(session_id) is None:
+                # Create a new vector store for this session
+                self.vector_stores[session_id] = Chroma.from_texts(
                     chunks,
                     self.embeddings,
                     metadatas=[{"source": filename, "chunk_index": i} for i in range(len(chunks))],
-                    persist_directory="./chroma_db"
+                    persist_directory=f"./chroma_db/session_{session_id}"
                 )
-                logger.info(f"Created new vector store with {len(chunks)} chunks")
+                logger.info(f"Created new vector store for session {session_id} with {len(chunks)} chunks")
             else:
-                # Update the existing vector store
-                self.vector_store.add_texts(
+                # Update the existing vector store for this session
+                self.vector_stores[session_id].add_texts(
                     chunks,
                     metadatas=[{"source": filename, "chunk_index": i} for i in range(len(chunks))]
                 )
-                logger.info(f"Added {len(chunks)} chunks to existing vector store")
+                logger.info(f"Added {len(chunks)} chunks to vector store for session {session_id}")
 
-            # Update processed files info
-            self.processed_files[filename] = {
+            # Update processed files info for this session
+            self.processed_files[session_id][filename] = {
                 "chunks": len(chunks),
                 "pages": len(reader.pages)
             }
+
+            # Verify vector store
+            vector_store = self.vector_stores[session_id]
+            if vector_store:
+                # Test retrieval with a simple query
+                test_results = vector_store.similarity_search("test", k=1)
+                if test_results:
+                    logger.info("Vector store verification successful: test query returned results")
+                else:
+                    logger.warning("Vector store verification: test query returned no results")
 
             return {
                 "chunks": len(chunks),
-                "pages": len(reader.pages)
+                "pages": len(reader.pages),
+                "text_length": len(text)
             }
 
         except Exception as e:
-            logger.error(f"Error processing PDF {filename}: {str(e)}")
+            logger.error(f"Error processing PDF {filename} for session {session_id}: {str(e)}")
             raise
 
-    def get_relevant_chunks(self, query: str, k: int = 4) -> List[Dict[str, str]]:
-        """Get relevant chunks for a query with metadata."""
-        if not self.vector_store:
-            raise ValueError("No vector store available. Please process PDFs first.")
+    def get_relevant_chunks(self, query: str, session_id: str, k: int = 4) -> List[Dict[str, str]]:
+        """Get relevant chunks for a query with metadata from a specific session."""
+        vector_store = self.get_session_vector_store(session_id)
+        if not vector_store:
+            raise ValueError(f"No vector store available for session {session_id}. Please process PDFs first.")
         
-        results = self.vector_store.similarity_search_with_score(query, k=k)
+        results = vector_store.similarity_search_with_score(query, k=k)
         return [{
             "text": doc.page_content,
             "source": doc.metadata["source"],
             "score": score
         } for doc, score in results]
 
-    def get_processed_files(self) -> dict:
-        """Get information about processed files."""
-        return self.processed_files
+    def get_processed_files(self, session_id: str) -> dict:
+        """Get information about processed files for a specific session."""
+        return self.processed_files.get(session_id, {})
 
-    def clear_vector_store(self):
-        """Clear the vector store and processed files."""
-        self.vector_store = None
+    def clear_session(self, session_id: str):
+        """Clear the vector store and processed files for a specific session."""
+        if session_id in self.vector_stores:
+            del self.vector_stores[session_id]
+        if session_id in self.processed_files:
+            del self.processed_files[session_id]
+        logger.info(f"Cleared vector store and processed files for session {session_id}")
+
+    def clear_all(self):
+        """Clear all vector stores and processed files."""
+        self.vector_stores = {}
         self.processed_files = {}
-        logger.info("Vector store and processed files tracking cleared")
+        logger.info("All vector stores and processed files tracking cleared")
 
 def process_pdf(file_path: str) -> tuple:
     """Process a PDF file and return chunks and pages count."""

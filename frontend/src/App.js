@@ -128,10 +128,11 @@ function App() {
           uploadedAt: new Date().toISOString()
         }]);
         
-        // If no active session, create a new one
+        // If no active session, create a new one, else update the current session
         if (!currentSession) {
-          const newSession = {
-            title: file.name,
+          setCurrentSession({
+            id: result.session_id, // Use the session_id from the backend
+            title: `Chat with ${file.name}`, // Set initial title
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             pinned: false,
@@ -142,9 +143,22 @@ function App() {
               file_type: 'pdf',
               chunk_count: result.chunks,
               page_count: result.pages
+            }],
+            messages: [] // Initialize messages for the new session
+          });
+        } else {
+          // If there's an existing session, update its files array
+          setCurrentSession(prevSession => ({
+            ...prevSession,
+            files: [...(prevSession?.files || []), {
+              id: result.file_id,
+              filename: result.filename,
+              original_filename: result.original_filename,
+              file_type: 'pdf',
+              chunk_count: result.chunks,
+              page_count: result.pages
             }]
-          };
-          setCurrentSession(newSession);
+          }));
         }
       }
 
@@ -168,69 +182,78 @@ function App() {
     }
   };
 
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!message.trim()) return;
+  const handleSendMessage = async () => {
+    if (!message.trim() || isProcessing) return;
 
-    // Check if files are uploaded
-    if (!hasUploadedFiles) {
-      setMessages(prev => [...prev, { 
-        type: 'error', 
-        content: 'Please upload a PDF file first to start chatting.' 
-      }]);
+    console.log('currentSession before check:', currentSession);
+    console.log('hasUploadedFiles before check:', hasUploadedFiles);
+
+    // Check if we have an active session and uploaded files
+    if (!currentSession && !hasUploadedFiles) {
+      setError('Please upload a PDF file first');
       return;
     }
 
-    const userMessage = message;
-    setMessage('');
-    setMessages(prev => [...prev, { type: 'user', content: userMessage }]);
-    setIsProcessing(true);
-    setIsTyping(true);
-
     try {
+      setIsProcessing(true);
+      setError('');
+      setIsTyping(true);
+
+      // Add user message to the current messages
+      const userMessage = { type: 'user', content: message.trim() };
+      setMessages(prev => [...prev, userMessage]);
+      setMessage('');
+
+      // Prepare the request body
+      const requestBody = {
+        question: userMessage.content,
+        session_id: currentSession?.id ? String(currentSession.id) : null,
+      };
+
+      // Only include files if it's a new session being created with uploaded files
+      if (!currentSession && uploadedFiles.length > 0) {
+        requestBody.files = uploadedFiles.map(file => ({
+          id: String(file.id),
+          filename: String(file.filename),
+        }));
+      }
+
+      // Send the message to the backend
       const response = await fetch(`${API_BASE_URL}/chat/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
         },
-        body: JSON.stringify({
-          question: userMessage,
-          session_id: currentSession?.id,
-          tags: currentSession?.tags || []
-        }),
+        body: JSON.stringify(requestBody),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.detail || data.message || 'Failed to get answer');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to get response from server');
       }
-      
-      // Simulate typing delay
-      setTimeout(() => {
-        setIsTyping(false);
-        // Add assistant's response
-        setMessages(prev => [...prev, { 
-          type: 'assistant', 
-          content: data.answer || 'Sorry, I could not generate a response.'
-        }]);
 
-        // Only update session if we don't have one
-        if (!currentSession && data.session) {
-          setCurrentSession(data.session);
-        }
-      }, 1000);
+      const data = await response.json();
+      
+      // Update the current session with the new messages
+      if (data.session) {
+        setCurrentSession(data.session);
+        setMessages(data.session.messages);
+      }
+
+      // Add assistant's response to messages
+      setMessages(prev => [...prev, { type: 'assistant', content: data.answer }]);
+      
+      // Scroll to bottom after message is added
+      setTimeout(scrollToBottom, 100);
 
     } catch (error) {
-      console.error('Error:', error);
-      setIsTyping(false);
-      setMessages(prev => [...prev, { 
-        type: 'error', 
-        content: error.message || 'Sorry, I encountered an error. Please try again.' 
-      }]);
+      console.error('Error sending message:', error);
+      setError('Failed to send message. Please try again.');
+      // Remove the user message if the request failed
+      setMessages(prev => prev.slice(0, -1));
     } finally {
       setIsProcessing(false);
+      setIsTyping(false);
     }
   };
 
@@ -304,7 +327,7 @@ function App() {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <div className="bg-white shadow-sm p-4 flex items-center justify-between">
+        <div className="bg-white border-b border-gray-200 p-4 flex items-center justify-between shadow-sm">
           <div className="flex items-center space-x-4">
             <button
               onClick={() => setShowHistory(!showHistory)}
@@ -323,71 +346,24 @@ function App() {
         {/* Main Content */}
         <div className="flex-1 flex">
           {/* File Upload Panel */}
-          <div className="w-80 border-r bg-white p-4">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Upload PDFs</h2>
-            <div className="space-y-4">
-              <div className="flex items-center justify-center w-full">
-                <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition-all duration-200 hover:border-blue-400 group">
-                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    <svg className="w-12 h-12 mb-4 text-gray-400 group-hover:text-blue-500 transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                    </svg>
-                    <p className="mb-2 text-sm text-gray-500 group-hover:text-gray-700">
-                      <span className="font-semibold">Click to upload</span> or drag and drop
-                    </p>
-                    <p className="text-xs text-gray-500">PDF files only</p>
-                  </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".pdf"
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-              {/* Separate Upload Button */}
-              <div className="mt-4 flex justify-center">
-                <button
-                  type="button"
-                  onClick={handleFileUpload}
-                  disabled={files.length === 0 || loading}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200 flex items-center space-x-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                >
-                  {loading ? (
-                    <>
-                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      <span>Uploading...</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                      </svg>
-                      <span>Upload</span>
-                    </>
-                  )}
-                </button>
-              </div>
-              {/* Selected Files */}
-              {files && files.length > 0 && (
-                <div className="space-y-2">
+          <div className="w-1/4 p-4 border-r border-gray-200 bg-gray-50 flex flex-col">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Upload Documents</h3>
+            <div className="flex-1 overflow-y-auto pr-2">
+              {files.length > 0 && (
+                <div className="mb-4 space-y-2">
                   {files.map((file, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                      <div className="flex items-center space-x-3">
-                        <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                        </svg>
-                        <span className="text-sm text-gray-600 truncate">{file.name}</span>
-                      </div>
+                    <div
+                      key={index}
+                      className="flex items-center justify-between bg-white p-3 rounded-lg shadow-sm border border-gray-200"
+                    >
+                      <span className="text-sm font-medium text-gray-700 truncate">
+                        {file.name}
+                      </span>
                       <button
                         onClick={() => removeFile(index)}
-                        className="text-gray-400 hover:text-gray-600 transition-colors duration-200"
+                        className="text-gray-400 hover:text-red-500 ml-2"
                       >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                         </svg>
                       </button>
@@ -395,113 +371,115 @@ function App() {
                   ))}
                 </div>
               )}
-              {/* Uploaded Files */}
-              {uploadedFiles && uploadedFiles.length > 0 && (
-                <div className="mt-6">
-                  <h3 className="text-sm font-medium text-gray-700 mb-3">Uploaded Files</h3>
-                  <div className="space-y-2">
+              {uploadedFiles.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <h4 className="text-md font-semibold text-gray-700 mb-3">Uploaded Files</h4>
+                  <ul className="space-y-2">
                     {uploadedFiles.map((file) => (
-                      <div key={file.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                        <div className="flex items-center space-x-3">
-                          <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                          </svg>
-                          <div className="flex flex-col">
-                            <span className="text-sm text-gray-600 truncate">{file.filename}</span>
-                            <span className="text-xs text-gray-400">
-                              {file.pages} pages • {file.chunks} chunks
-                            </span>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => {
-                            setUploadedFiles(prev => prev.filter(f => f.id !== file.id));
-                            // You might want to add an API call here to delete the file from the backend
-                          }}
-                          className="text-gray-400 hover:text-gray-600 transition-colors duration-200"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
+                      <li key={file.id} className="flex items-center text-sm text-gray-600">
+                        <svg className="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        {file.filename} ({file.pages} pages)
+                      </li>
                     ))}
-                  </div>
-                </div>
-              )}
-              {error && (
-                <div className="text-red-500 text-sm mt-2 bg-red-50 p-3 rounded-lg border border-red-200">
-                  {error}
+                  </ul>
                 </div>
               )}
             </div>
+            <div className="mt-4 border-t border-gray-200 pt-4">
+              <label
+                htmlFor="file-upload"
+                className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer transition-colors duration-200"
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                Add PDF
+              </label>
+              <input
+                id="file-upload"
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".pdf"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <button
+                onClick={handleFileUpload}
+                disabled={files.length === 0 || loading}
+                className="w-full mt-3 px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Uploading...' : 'Upload Selected'}
+              </button>
+              {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
+            </div>
           </div>
 
-          {/* Chat Panel */}
-          <div className="flex-1 flex flex-col">
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {messages && messages.length > 0 && messages.map((msg, index) => (
+          {/* Chat Area */}
+          <div className="flex-1 flex flex-col bg-white">
+            <div className="flex-1 overflow-y-auto p-6 space-y-4" ref={messagesEndRef}>
+              {messages.map((msg, index) => (
                 <div
                   key={index}
-                  className={`flex ${
-                    msg.type === "user" ? "justify-end" : "justify-start"
-                  }`}
+                  className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-3xl rounded-lg p-4 ${
-                      msg.type === "user"
-                        ? "bg-blue-600 text-white"
-                        : msg.type === "error"
-                        ? "bg-red-100 text-red-700"
-                        : msg.type === "system"
-                        ? "bg-green-50 text-green-700 border border-green-200"
-                        : "bg-white shadow-sm"
+                    className={`max-w-[70%] px-4 py-3 rounded-lg shadow-md ${
+                      msg.type === 'user'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-100 text-gray-800'
                     }`}
                   >
-                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                    <p className="text-sm">{msg.content}</p>
                   </div>
                 </div>
               ))}
-              {messages && messages.length === 0 && (
-                <div className="flex justify-center items-center h-full text-gray-500">
-                  No messages yet. Start the conversation!
-                </div>
-              )}
               {isTyping && (
                 <div className="flex justify-start">
-                  <div className="bg-white rounded-lg p-4 shadow-sm">
-                    <div className="flex space-x-2">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  <div className="bg-gray-100 px-4 py-3 rounded-lg shadow-md">
+                    <div className="flex space-x-1">
+                      <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></span>
+                      <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '.1s' }}></span>
+                      <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '.2s' }}></span>
                     </div>
                   </div>
                 </div>
               )}
-              <div ref={messagesEndRef} />
             </div>
 
-            {/* Input */}
-            <form onSubmit={handleSendMessage} className="bg-white border-t p-4">
-              <div className="flex space-x-4">
-                <input
-                  type="text"
+            {/* Message Input */}
+            <div className="border-t border-gray-200 p-4 bg-white">
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                handleSendMessage();
+              }} className="relative flex items-center">
+                <textarea
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault(); // Prevent default to avoid new line AND form submission
+                      handleSendMessage();
+                    }
+                  }}
                   placeholder="Type your message..."
-                  className="flex-1 border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={isProcessing}
-                />
+                  className="flex-1 resize-none overflow-hidden pr-10 px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow duration-200"
+                  rows="1"
+                  style={{ minHeight: '50px', maxHeight: '150px' }}
+                ></textarea>
                 <button
-                  type="submit"
-                  disabled={isProcessing}
-                  className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  type="submit" // Set type to submit for form submission
+                  disabled={isProcessing || !message.trim()}
+                  className="absolute right-3 p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Send
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
                 </button>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
         </div>
       </div>
