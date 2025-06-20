@@ -1,9 +1,10 @@
-# Inquiero System Architecture
+# Inquiero Architecture
 
-## System Overview
-Inquiero is a document-based Q&A system that processes PDF documents and enables interactive conversations about their content. The system uses a modern microservices architecture with a FastAPI backend and a React frontend.
+## Overview
+Inquiero is a document-based Q&A system that processes PDF documents and enables interactive conversations about their content using AI.
 
-## Architecture Diagramn 
+## System Architecture
+
 ```
 ┌─────────────────┐     HTTP/WebSocket    ┌─────────────────┐
 │                 │     Communication     │                 │
@@ -33,148 +34,74 @@ Inquiero is a document-based Q&A system that processes PDF documents and enables
 └─────────────────┘     └─────────────────┘         └─────────────────┘
 ```
 
-## Component Details
+## Components
 
 ### Frontend (React)
-- **State Management**: Uses React Context and hooks for state management
-- **Key Components**:
-  - PDF Upload Component
-  - Chat Interface
-  - Document Viewer
-  - Language Selection
-- **Communication**: 
-  - REST API calls for document operations
-  - WebSocket for real-time chat
-  - File upload using multipart/form-data
+- **State Management**: React Context and hooks
+- **Key Features**:
+  - PDF upload with drag-and-drop
+  - Real-time chat interface
+  - Document preview
+  - Multi-language support
+- **Communication**: REST API and WebSocket
 
 ### Backend (FastAPI)
-1. **API Layer** (`app.py`, `api.py`)
-   - RESTful endpoints for:
-     - PDF upload and management
-     - Chat operations
-     - Language detection
-   - WebSocket endpoints for real-time chat
-   - CORS middleware for frontend communication
-
-2. **PDF Processing Service** (`pdf_processor.py`)
-   - Document processing pipeline:
-     ```
-     PDF Upload → Text Extraction → OCR (if needed) → 
-     Language Detection → Text Chunking → Vector Embedding
-     ```
-   - Features:
-     - PDF text extraction using PyMuPDF
-     - OCR using Tesseract
-     - Language detection
-     - Text chunking for better context
-
-3. **Vector Store** (FAISS)
-   - Stores document embeddings
-   - Enables semantic search
-   - Maintains document context for Q&A
-
-4. **Chat Management** (`chat_manager.py`)
-   - Manages chat sessions
-   - Maintains conversation history
-   - Integrates with LLM (Ollama/Mistral)
-
-5. **Language Processing**
-   - Language detection using langdetect
-   - Translation capabilities using googletrans
-   - Multi-language support
+- **API Layer**: RESTful endpoints for PDF operations and chat
+- **PDF Processing**: Text extraction, OCR, language detection
+- **Vector Store**: FAISS for semantic search and context retrieval
+- **Chat Management**: Session handling and conversation history
+- **Language Processing**: Multi-language support and detection
 
 ## Data Flow
 
-### Document Processing Flow
-1. User uploads PDF
-2. Backend receives file
-3. PDF Processor:
-   - Extracts text
-   - Performs OCR if needed
-   - Detects language
-   - Creates text chunks
-   - Generates embeddings
-4. Vector store is updated
-5. Document is ready for Q&A
+### Document Processing
+1. PDF upload → Text extraction → OCR (if needed)
+2. Language detection → Text chunking → Vector embedding
+3. Store in FAISS vector database
 
 ### Chat Flow
-1. User sends question
-2. Backend:
-   - Retrieves relevant context from vector store
-   - Formats prompt with context
-   - Sends to LLM (Ollama)
-3. Response is generated
-4. Chat history is updated
-5. Response sent to frontend
+1. User question → Context retrieval from vector store
+2. Format prompt with context → Send to LLM (Ollama)
+3. Generate response → Update chat history → Return to user
 
-## External Services Integration
+## External Services
 
-### Ollama Integration
-- Local LLM service
-- Default URL: `http://localhost:11434`
-- Uses Mistral model
-- Handles:
-  - Question answering
-  - Context understanding
-  - Response generation
+### Ollama (Local LLM)
+- URL: `http://localhost:11434`
+- Model: Mistral
+- Purpose: Question answering and response generation
 
 ### Tesseract OCR
-- Local OCR service
-- Handles:
-  - Image text extraction
-  - Multi-language OCR
-  - PDF image processing
+- Purpose: Image text extraction
+- Support: Multi-language OCR
 
-## Security Considerations
-1. **File Upload Security**
-   - File type validation
-   - Size limits
-   - Content scanning
+## Security & Performance
 
-2. **API Security**
-   - CORS configuration
-   - Rate limiting
-   - Input validation
+### Security
+- File type validation and size limits
+- CORS configuration
+- Local data storage only
 
-3. **Data Security**
-   - Local storage only
-   - No sensitive data transmission
-   - Secure file handling
+### Performance
+- Efficient PDF processing pipeline
+- Vector store optimization
+- Stateless API design
 
-## Scalability Considerations
-1. **Backend Scalability**
-   - Stateless API design
-   - Efficient PDF processing
-   - Vector store optimization
+## File Structure
+```
+backend/
+├── config/          # Configuration management
+├── data/            # PDF storage and embeddings
+├── utils/           # Core services
+│   ├── api.py       # API endpoints
+│   ├── chat_manager.py
+│   ├── pdf_processor.py
+│   └── rag_engine.py
+└── run.py           # Application entry point
 
-2. **Frontend Scalability**
-   - Component-based architecture
-   - Efficient state management
-   - Lazy loading
-
-3. **Resource Management**
-   - PDF storage cleanup
-   - Chat history management
-   - Memory optimization
-
-## Error Handling
-1. **Frontend Error Handling**
-   - User-friendly error messages
-   - Graceful degradation
-   - Retry mechanisms
-
-2. **Backend Error Handling**
-   - Proper HTTP status codes
-   - Detailed error logging
-   - Exception handling
-
-## Monitoring and Logging
-1. **Backend Logging**
-   - PDF processing logs
-   - API request logs
-   - Error logs
-
-2. **Performance Monitoring**
-   - Response times
-   - Resource usage
-   - Error rates 
+frontend/
+├── src/
+│   ├── App.js       # Main application
+│   └── styles/      # CSS styling
+└── public/          # Static assets
+``` 

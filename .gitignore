@@ -102,11 +102,3 @@ frontend/dist/
 .coverage
 htmlcov/
 .pytest_cache/
-
-# Keep .github/images folder for README screenshots
-!.github/
-!.github/images/
-!.github/images/*.png
-!.github/images/*.jpg
-!.github/images/*.jpeg
-!.github/images/*.gif 
