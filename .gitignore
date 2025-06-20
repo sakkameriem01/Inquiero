@@ -19,31 +19,96 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Virtual Environment
+# Virtual environments
 venv/
+.venv/
 env/
 ENV/
+env.bak/
+venv.bak/
 
 # IDE
-.idea/
 .vscode/
+.idea/
 *.swp
 *.swo
+*~
 
-# Project specific
-data/
-chat_history/
-*.pdf
-chats.json
-.env
-.env.local
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
 # Logs
 *.log
 logs/
 
-# Test coverage
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Data files - PDFs are stored in data/pdfs/ only
+data/pdfs/*.pdf
+data/embeddings/
+data/vectors/
+
+# Chat history - only JSON files, no PDFs
+chat_history/*.json
+
+# Model files
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.hdf5
+*.onnx
+*.pt
+*.pth
+
+# FAISS index files
+*.faiss
+*.index
+
+# Large text files
+*.txt
+*.csv
+!requirements.txt
+!package.json
+!*.config.json
+
+# Node.js (for frontend)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn-integrity
+
+# React build
+frontend/build/
+frontend/dist/
+
+# Coverage reports
 .coverage
 htmlcov/
 .pytest_cache/ 

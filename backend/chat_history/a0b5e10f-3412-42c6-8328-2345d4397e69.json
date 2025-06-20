@@ -1,0 +1,65 @@
+{
+  "id": "a0b5e10f-3412-42c6-8328-2345d4397e69",
+  "name": "New Chat",
+  "created_at": "2025-06-20T19:12:46.530454",
+  "pdf_paths": [
+    "data\\pdfs\\7c1f2a24a450a516_CV Kalthoum Sakka.pdf"
+  ],
+  "pdf_names": [
+    "7c1f2a24a450a516_CV Kalthoum Sakka.pdf"
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": "c'est quoi le sujet de ce fichier ? ",
+      "timestamp": "2025-06-20T19:12:56.050433"
+    },
+    {
+      "role": "assistant",
+      "content": "Le sujet de ce fichier est la présentation d'un projet (Source 1) et le CV (Source 2) de Kalthoum Sakka. Le projet en question est un site web pour la gestion de location et vente de voitures, qui propose des fonctionnalités telles que la gestion de véhicules, la réservation, le suivi des clients, la gestion des transactions etc. La CV de Kalthoum Sakka indique qu'elle est une étudiante en Informatique dynamique et motivée, qui cherche à acquérir de nouvelles compétences professionnelles.",
+      "timestamp": "2025-06-20T19:13:07.538912"
+    },
+    {
+      "role": "user",
+      "content": "quel role le correspond le mieux ? ",
+      "timestamp": "2025-06-20T19:13:39.412398"
+    },
+    {
+      "role": "assistant",
+      "content": "Based on the provided context, Kalthoum Sakka is currently a student in Computer Science (Informatique) as mentioned in Source 1. Therefore, her role most likely corresponds to that of a student. However, since no information about her current or previous professional roles is provided, it's not possible to determine if she holds any other positions at this time.",
+      "timestamp": "2025-06-20T19:13:47.735283"
+    },
+    {
+      "role": "user",
+      "content": "quel role le correspond le mieux ? ",
+      "timestamp": "2025-06-20T20:07:30.065245"
+    },
+    {
+      "role": "assistant",
+      "content": "La candidata Kalthoum Sakka parece tener experiencia en desarrollo multiplataforma y optimizacion de la experiencia del usuario, ademas de integrar bases de datos. Asimismo, ha trabajado en el desarrollo de una aplicación móvil para explorar recetas y gestionar pedidos con FlutterFlow. Por lo tanto, su perfil parece ser el de un Desarrollador de Aplicaciones Móviles.",
+      "timestamp": "2025-06-20T20:07:51.031423"
+    },
+    {
+      "role": "user",
+      "content": "quel role le correspond le mieux ? ",
+      "timestamp": "2025-06-20T20:10:24.980175"
+    },
+    {
+      "role": "assistant",
+      "content": "Le rôle qui correspond le mieux à Kalthoum Sakka semble être celui d'une développeuse mobile, en particulier dans le domaine du développement multiplateforme et de l'optimisation de l'expérience utilisateur. Elle a également des compétences en intégration de bases de données, comme on peut le voir à travers son expérience pratique avec l'application mobile Kitchinetna.",
+      "timestamp": "2025-06-20T20:10:34.702865"
+    },
+    {
+      "role": "user",
+      "content": "de quoi s'agit son projet ? ",
+      "timestamp": "2025-06-20T22:52:34.276377"
+    },
+    {
+      "role": "assistant",
+      "content": "Kalthoum Sakka's project is the development of a mobile application called Kitchinetna. This app allows users to explore various recipes and order meal kits with pre-measured ingredients. It also includes features for discovering new recipes, managing orders, and tracking deliveries to enhance the user experience.",
+      "timestamp": "2025-06-20T22:52:55.282612"
+    }
+  ],
+  "chat_id": "a0b5e10f-3412-42c6-8328-2345d4397e69",
+  "updated_at": "2025-06-20T23:51:41.190935"
+}
