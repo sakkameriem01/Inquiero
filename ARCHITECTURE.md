@@ -3,7 +3,7 @@
 ## System Overview
 Inquiero is a document-based Q&A system that processes PDF documents and enables interactive conversations about their content. The system uses a modern microservices architecture with a FastAPI backend and a React frontend.
 
-## Architecture Diagram
+## Architecture Diagramn 
 ```
 ┌─────────────────┐     HTTP/WebSocket    ┌─────────────────┐
 │                 │     Communication     │                 │

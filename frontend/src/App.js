@@ -479,28 +479,28 @@ function App() {
   const confirmDeleteChat = async () => {
     if (!chatToDelete) return;
     
-    setLoading(true);
-    try {
+      setLoading(true);
+      try {
       const response = await fetch(`${API_BASE_URL}/chats/${chatToDelete.id}/`, {
-        method: 'DELETE',
-      });
+          method: 'DELETE',
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`HTTP error! status: ${response.status} - ${errorData.detail || response.statusText}`);
-      }
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(`HTTP error! status: ${response.status} - ${errorData.detail || response.statusText}`);
+        }
 
       if (currentChatId === chatToDelete.id) {
-        setCurrentChatId(null);
-        setMessages([]);
-        setAttachedPDFs([]);
-      }
+          setCurrentChatId(null);
+          setMessages([]);
+          setAttachedPDFs([]);
+        }
       setChats(prevChats => prevChats.filter(chat => chat.id !== chatToDelete.id));
-      toast.success("Chat deleted successfully! 🗑️");
-    } catch (e) {
-      toast.error(`Failed to delete chat: ${e.message} ⚠️`);
-    } finally {
-      setLoading(false);
+        toast.success("Chat deleted successfully! 🗑️");
+      } catch (e) {
+        toast.error(`Failed to delete chat: ${e.message} ⚠️`);
+      } finally {
+        setLoading(false);
       setChatToDelete(null);
     }
   };
@@ -554,37 +554,37 @@ function App() {
   };
 
   const confirmDeleteAllChats = async () => {
-    setLoading(true);
-    try {
-      console.log("Sending delete all chats request...");
-      const response = await fetch(`${API_BASE_URL}/chats/all/`, {
-        method: 'DELETE',
-      });
+      setLoading(true);
+      try {
+        console.log("Sending delete all chats request...");
+        const response = await fetch(`${API_BASE_URL}/chats/all/`, {
+          method: 'DELETE',
+        });
 
-      console.log("Delete all chats response status:", response.status);
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("Delete all chats error:", errorData);
-        throw new Error(`HTTP error! status: ${response.status} - ${errorData.detail || response.statusText}`);
-      }
+        console.log("Delete all chats response status:", response.status);
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error("Delete all chats error:", errorData);
+          throw new Error(`HTTP error! status: ${response.status} - ${errorData.detail || response.statusText}`);
+        }
 
-      const result = await response.json();
-      console.log("Delete all chats success:", result);
+        const result = await response.json();
+        console.log("Delete all chats success:", result);
 
-      setCurrentChatId(null);
-      setChats([]);
-      setMessages([]);
-      setAttachedPDFs([]);
-      toast.success("All chats deleted! 🗑️");
-      
-      // Refresh the chat list to ensure UI is updated
-      await fetchChats();
-    } catch (e) {
-      console.error("Delete all chats failed:", e);
-      toast.error(`Failed to delete all chats: ${e.message} ⚠️`);
-    } finally {
-      setLoading(false);
+        setCurrentChatId(null);
+        setChats([]);
+        setMessages([]);
+        setAttachedPDFs([]);
+        toast.success("All chats deleted! 🗑️");
+        
+        // Refresh the chat list to ensure UI is updated
+        await fetchChats();
+      } catch (e) {
+        console.error("Delete all chats failed:", e);
+        toast.error(`Failed to delete all chats: ${e.message} ⚠️`);
+      } finally {
+        setLoading(false);
     }
   };
 
@@ -603,8 +603,8 @@ function App() {
       }
       
       const pdfUrl = `${API_BASE_URL}/pdf/${filename}`;
-      setPdfUrlToPreview(pdfUrl);
-      setShowPdfModal(true);
+    setPdfUrlToPreview(pdfUrl);
+    setShowPdfModal(true);
     } catch (error) {
       console.error("Error constructing PDF URL:", error);
       toast.error("Failed to preview PDF.");
@@ -637,7 +637,7 @@ function App() {
       if (!response.ok) {
         toast.error("Failed to remove file. Reverting changes.");
         setAttachedPDFs(originalFiles);
-      } else {
+    } else {
         toast.success("File removed successfully.");
       }
     } catch (error) {
@@ -933,7 +933,7 @@ function App() {
       <div className="flex flex-col flex-1 h-full bg-gray-100 dark:bg-gray-900 transition-all duration-300">
         {/* Top Bar */}
         <div className="flex items-center justify-between p-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-          <button 
+          <button
             onClick={toggleSidebar} 
             className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
             data-tooltip-id="sidebar-tooltip"
@@ -946,7 +946,7 @@ function App() {
             {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
           </button>
         </div>
-
+        
         {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
           {/* Sidebar */}
@@ -960,24 +960,24 @@ function App() {
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Chats</h2>
                   <div className="flex gap-1">
-                    <button
+          <button 
                       onClick={handleDeleteAllChats}
                       className="btn-icon btn-icon-danger"
                       data-tooltip-id="delete-all-tooltip"
                       data-tooltip-content="Delete All Chats"
                     >
                       <Trash2 size={16} />
-                    </button>
-                    <button
+          </button>
+          <button 
                       onClick={() => uploadFilesToChat([])}
                       className="btn-icon btn-icon-primary"
                       data-tooltip-id="new-chat-tooltip"
                       data-tooltip-content="New Chat"
                     >
                       <Plus size={16} />
-                    </button>
-                  </div>
-                </div>
+          </button>
+        </div>
+            </div>
                 <div className="flex-1 overflow-y-auto pr-1 -mr-1 space-y-2">
                   {favoritedChats.size > 0 && (
                     <div className="mb-4">
@@ -1007,25 +1007,25 @@ function App() {
                   {chats
                     .filter(chat => !favoritedChats.has(chat.id))
                     .map(chat => (
-                      <ChatItem
-                        key={chat.id}
-                        chat={chat}
-                        isSelected={currentChatId === chat.id}
+                <ChatItem
+                  key={chat.id}
+                  chat={chat}
+                  isSelected={currentChatId === chat.id}
                         isFavorited={false}
                         onSelect={handleSelectChat}
                         onRename={handleRenameChat}
-                        onFavorite={toggleFavorite}
-                        onDelete={handleDeleteChat}
-                        renamingChatId={renamingChatId}
-                        newChatName={newChatName}
-                        setNewChatName={setNewChatName}
+                  onFavorite={toggleFavorite}
+                  onDelete={handleDeleteChat}
+                  renamingChatId={renamingChatId}
+                  newChatName={newChatName}
+                  setNewChatName={setNewChatName}
                         setRenamingChatId={setRenamingChatId}
-                      />
+                />
                     ))}
                 </div>
               </div>
-            )}
-          </div>
+          )}
+        </div>
 
           {/* Main Chat Area */}
           <div className="flex flex-col flex-1 h-full overflow-hidden">
@@ -1037,15 +1037,15 @@ function App() {
                     {chats.find(c => c.id === currentChatId)?.name || 'Chat'}
                   </h2>
                   <div className="flex items-center gap-2">
-                    <button
+            <button 
                       onClick={() => mainFileInputRef.current.click()}
                       className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 dark:bg-purple-500 dark:hover:bg-purple-600 transition-colors"
-                      data-tooltip-id="upload-tooltip"
+              data-tooltip-id="upload-tooltip"
                       data-tooltip-content="Upload more files to this chat"
-                    >
+            >
                       <FileUp size={16} />
                       <span>Upload More</span>
-                    </button>
+            </button>
                   </div>
                 </div>
 
@@ -1074,8 +1074,8 @@ function App() {
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
+          </div>
+        )}
 
                 {/* Messages Area */}
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
@@ -1133,19 +1133,19 @@ function App() {
                                 >
                                   Cancel
                                 </button>
-                              </div>
-                            </div>
+                  </div>
+                </div>
                           ) : (
                             typeof msg.content === 'string' ? (
                               msg.content.split('\\n').map((line, i) => (
                                 <p key={i}>{line}</p>
-                              ))
-                            ) : (
+              ))
+            ) : (
                               <p>{JSON.stringify(msg.content)}</p>
                             )
                           )}
-                        </div>
-                      </div>
+              </div>
+            </div>
                       {/* Copy and Edit buttons positioned below the chat bubble */}
                       <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 gap-2`}>
                         {msg.role === 'user' && editingMessageIndex !== index && (
@@ -1190,31 +1190,31 @@ function App() {
                       </div>
                     </div>
                   ))}
-                  {showTyping && <TypingBubble />}
-                  <div ref={messagesEndRef} />
-                </div>
+          {showTyping && <TypingBubble />}
+          <div ref={messagesEndRef} />
+        </div>
 
                 {/* Message Input */}
                 <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/50">
                   <form onSubmit={handleSendMessage} className="relative">
                     <textarea
-                      value={question}
-                      onChange={(e) => setQuestion(e.target.value)}
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
                       onKeyDown={handleKeyDown}
                       placeholder="Ask a question about your document..."
                       className="w-full pl-4 pr-12 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
                       rows="1"
                       style={{ minHeight: '52px', maxHeight: '200px' }}
-                    />
-                    <button
-                      type="submit"
+            />
+            <button
+              type="submit"
                       disabled={loading}
                       className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-purple-600 text-white hover:bg-purple-700 disabled:bg-purple-300 dark:disabled:bg-purple-800"
-                    >
+            >
                       <Send size={20} />
-                    </button>
-                  </form>
-                </div>
+            </button>
+        </form>
+              </div>
               </>
             ) : (
               // Welcome Screen / Initial State
@@ -1228,12 +1228,12 @@ function App() {
                   <FileUp size={50} className="mb-4 text-purple-400 dark:text-purple-500" />
                   <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-2">Drop your PDF here</h2>
                   <p className="text-gray-600 dark:text-gray-300">or click to browse</p>
-                </div>
-              </div>
+                    </div>
+                  </div>
             )}
+                </div>
+            </div>
           </div>
-        </div>
-      </div>
 
       {/* PDF Preview Modal */}
       {showPdfModal && (
@@ -1249,18 +1249,18 @@ function App() {
               </button>
             </div>
             <div className="p-6">
-              <Document
-                file={pdfUrlToPreview}
-                onLoadSuccess={onDocumentLoadSuccess}
-                className="flex justify-center"
-              >
-                <Page
-                  pageNumber={pageNumber}
-                  renderTextLayer={false}
-                  renderAnnotationLayer={false}
+            <Document
+              file={pdfUrlToPreview}
+              onLoadSuccess={onDocumentLoadSuccess}
+              className="flex justify-center"
+            >
+              <Page
+                pageNumber={pageNumber}
+                renderTextLayer={false}
+                renderAnnotationLayer={false}
                   className="shadow-lg rounded-lg"
-                />
-              </Document>
+              />
+            </Document>
             </div>
             <div className="flex justify-center items-center gap-4 p-6 border-t border-gray-200 dark:border-gray-700">
               <button

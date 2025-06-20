@@ -72,7 +72,7 @@ async def upload_pdf(file: UploadFile = File(...), chat_id: Optional[str] = Body
                 "message": "PDF uploaded and appended to chat successfully",
                 "filename": file.filename,
                 "pdf_path": pdf_path,
-                "chat_id": chat_id,
+            "chat_id": chat_id,
                 "chat_name": updated_chat.get("name", "Chat"),
                 "language": metadata.get("language", "en"),
                 "metadata": metadata
@@ -83,7 +83,7 @@ async def upload_pdf(file: UploadFile = File(...), chat_id: Optional[str] = Body
             
             return JSONResponse({
                 "message": "PDF uploaded and a new chat was created successfully",
-                "filename": file.filename,
+            "filename": file.filename,
                 "pdf_path": pdf_path,
                 "chat_id": chat_data["id"],
                 "chat_name": chat_data["name"],
@@ -156,11 +156,11 @@ async def send_message(chat_id: str, message: Message):
     """
     try:
         # Get chat
-        chat = chat_manager.get_chat(chat_id)
-        if not chat:
-            raise HTTPException(status_code=404, detail="Chat not found")
-        
-        # Add user message to chat
+    chat = chat_manager.get_chat(chat_id)
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    # Add user message to chat
         user_text = message.text
         if not user_text:
             raise HTTPException(status_code=400, detail="Message text is required")
@@ -169,7 +169,7 @@ async def send_message(chat_id: str, message: Message):
         chat_manager.add_message(chat_id, "user", user_text)
         
         # Get PDF paths for this chat
-        pdf_paths = chat.get("pdf_paths", [])
+    pdf_paths = chat.get("pdf_paths", [])
         
         # Get chat history
         chat_history = chat.get("messages", [])
