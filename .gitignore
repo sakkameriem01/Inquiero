@@ -1,25 +1,25 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+# Python (Backend)
+backend/__pycache__/
+backend/*.py[cod]
+backend/*$py.class
+backend/*.so
+backend/.Python
+backend/build/
+backend/develop-eggs/
+backend/dist/
+backend/downloads/
+backend/eggs/
+backend/.eggs/
+backend/lib/
+backend/lib64/
+backend/parts/
+backend/sdist/
+backend/var/
+backend/wheels/
+backend/*.egg-info/
+backend/.installed.cfg
+backend/*.egg
+backend/MANIFEST
 
 # Virtual environments
 venv/
@@ -68,41 +68,31 @@ temp/
 tmp/
 
 # Data files - PDFs are stored in data/pdfs/ only
-data/pdfs/*.pdf
-data/embeddings/
-data/vectors/
+backend/data/pdfs/*.pdf
 
 # Chat history - only JSON files, no PDFs
-chat_history/*.json
+backend/chat_history/*.json
 
 # Model files
-*.pkl
-*.pickle
-*.joblib
-*.h5
-*.hdf5
-*.onnx
-*.pt
-*.pth
+backend/models/
 
 # FAISS index files
-*.faiss
-*.index
+backend/models/faiss/
 
 # Large text files
 *.txt
 *.csv
-!requirements.txt
-!package.json
-!*.config.json
+!backend/requirements.txt
+!frontend/package.json
+!backend/*.config.json
 
-# Node.js (for frontend)
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.npm
-.yarn-integrity
+# Node.js (Frontend)
+frontend/node_modules/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.npm
+frontend/.yarn-integrity
 
 # React build
 frontend/build/
