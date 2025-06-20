@@ -1,0 +1,690 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global styles for body and root elements */
+html, body, #root, .app-container {
+    height: 100%;
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100;
+}
+
+/* Gradient text styles */
+.gradient-text {
+    @apply bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent;
+    background-size: 200% auto;
+    animation: gradient-shift 8s ease infinite;
+}
+
+@keyframes gradient-shift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+@layer base {
+  body {
+    @apply bg-background-light dark:bg-background-dark text-text-primary-light dark:text-text-primary-dark transition-colors duration-200;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2.5 rounded-lg transition-all duration-200 ease-in-out font-medium text-sm;
+  }
+
+  .btn-primary {
+    @apply bg-accent-blue hover:bg-opacity-90 text-white shadow-soft disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply bg-accent-purple hover:bg-opacity-90 text-white shadow-soft disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-icon {
+    @apply p-2 rounded-lg transition-colors duration-200;
+  }
+
+  .btn-icon-primary {
+    @apply text-accent-blue hover:bg-accent-blue hover:bg-opacity-10;
+  }
+
+  .btn-icon-secondary {
+    @apply text-accent-purple hover:bg-accent-purple hover:bg-opacity-10;
+  }
+
+  .btn-icon-danger {
+    @apply text-red-500 hover:bg-red-500 hover:bg-opacity-10;
+  }
+
+  .btn-icon-favorite {
+    @apply inline-flex items-center justify-center rounded-md p-2 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2;
+    background-color: transparent;
+    border: none;
+    color: #FFD43B;
+  }
+
+  .btn-icon-favorite:hover, .btn-icon-favorite:focus {
+    background-color: #FFF9DB;
+    color: #FFD43B;
+  }
+
+  .chat-bubble {
+    @apply p-4 rounded-xl shadow-soft transition-all duration-200;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+    min-width: 60px;
+    max-width: 85%;
+    width: fit-content;
+  }
+
+  .chat-bubble-user {
+    @apply bg-chat-user ml-auto;
+  }
+
+  /* Dark mode styling for user chat bubbles */
+  html.dark .chat-bubble-user {
+    @apply bg-gray-700 text-white;
+  }
+
+  .chat-bubble-ai {
+    @apply bg-chat-ai-light dark:bg-chat-ai-dark;
+  }
+
+  /* When sidebar is closed, chat bubbles can use more width */
+  .sidebar-closed .chat-bubble {
+    max-width: 95%;
+  }
+
+  /* Responsive chat bubble sizing */
+  @media (min-width: 768px) {
+    .chat-bubble {
+      max-width: 80%;
+    }
+    
+    .sidebar-closed .chat-bubble {
+      max-width: 90%;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .chat-bubble {
+      max-width: 75%;
+    }
+    
+    .sidebar-closed .chat-bubble {
+      max-width: 85%;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .chat-bubble {
+      max-width: 70%;
+    }
+    
+    .sidebar-closed .chat-bubble {
+      max-width: 80%;
+    }
+  }
+
+  @media (min-width: 1536px) {
+    .chat-bubble {
+      max-width: 65%;
+    }
+    
+    .sidebar-closed .chat-bubble {
+      max-width: 75%;
+    }
+  }
+
+  .sidebar {
+    @apply bg-sidebar-light dark:bg-sidebar-dark transition-colors duration-200;
+  }
+
+  /* Sidebar responsive behavior */
+  .sidebar {
+    @apply bg-sidebar-light dark:bg-sidebar-dark transition-all duration-300 ease-in-out;
+  }
+
+  /* Ensure sidebar is properly positioned on mobile */
+  @media (max-width: 768px) {
+    .sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      z-index: 40;
+    }
+  }
+
+  /* Ensure sidebar is properly positioned on desktop */
+  @media (min-width: 768px) {
+    .sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      z-index: 40;
+    }
+  }
+
+  /* Ensure main content doesn't overlap on mobile when sidebar is open */
+  @media (max-width: 768px) {
+    main {
+      margin-left: 0;
+    }
+  }
+
+  /* Ensure main content is properly positioned when sidebar is closed */
+  @media (min-width: 768px) {
+    main {
+      transition: margin-left 0.3s ease-in-out;
+    }
+  }
+
+  /* Dynamic layout adjustments for main content */
+  main {
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  /* When sidebar is closed, main content should use full width */
+  main:not(.sidebar-open) {
+    @apply w-full;
+  }
+
+  /* Smooth transitions for chat bubbles and content areas */
+  .chat-bubble {
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  /* Responsive grid adjustments for attached files */
+  .attached-files-grid {
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  /* Ensure content areas expand smoothly */
+  .content-area {
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 
+           bg-white dark:bg-gray-800 focus:ring-2 focus:ring-accent-blue focus:border-transparent
+           transition-all duration-200 text-sm;
+  }
+
+  .file-upload-btn {
+    @apply btn btn-primary w-full cursor-pointer relative overflow-hidden;
+  }
+
+  .file-upload-btn input[type="file"] {
+    @apply absolute inset-0 w-full h-full opacity-0 cursor-pointer;
+  }
+
+  .typing-bubble {
+    display: flex;
+    align-items: center;
+    background: var(--tw-bg-opacity) theme('colors.chat.ai.light');
+    color: theme('colors.text.primary.light');
+    min-width: 60px;
+    min-height: 40px;
+    padding: 0.75rem 1.25rem;
+    margin-bottom: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  }
+
+  .dark .typing-bubble {
+    background: theme('colors.chat.ai.dark');
+    color: theme('colors.text.primary.dark');
+  }
+
+  .typing-dots {
+    display: flex;
+    align-items: center;
+    height: 18px;
+    gap: 0.3em;
+  }
+
+  .typing-dots span {
+    display: block;
+    width: 8px;
+    height: 8px;
+    background: currentColor;
+    border-radius: 50%;
+    opacity: 0.6;
+    animation: bounce 1.2s infinite;
+  }
+
+  .typing-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .typing-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+
+  @keyframes bounce {
+    0%, 80%, 100% { transform: translateY(0); opacity: 0.6; }
+    40% { transform: translateY(-8px); opacity: 1; }
+  }
+
+  .chat-session-container {
+    background: transparent !important;
+    border: 1px solid #e5e7eb; /* Tailwind gray-200 */
+    box-shadow: none !important;
+    border-radius: 0.75rem; /* match previous rounded-xl */
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    transition: border-color 0.2s;
+  }
+
+  .chat-session-container:hover, .chat-session-container:focus {
+    border-color: #60a5fa; /* Tailwind blue-400 for subtle focus */
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 dark:bg-gray-600 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400 dark:bg-gray-500;
+}
+
+/* Modern Toastify styles */
+.Toastify__toast {
+  border-radius: 1rem !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+  font-family: 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.875rem 1rem;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #374151;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-bottom: 0.75rem;
+}
+
+.Toastify__toast--success {
+  background: rgba(240, 253, 244, 0.95) !important;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  color: #166534;
+}
+
+.Toastify__toast--error {
+  background: rgba(254, 242, 242, 0.95) !important;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #991b1b;
+}
+
+.Toastify__toast--info {
+  background: rgba(239, 246, 255, 0.95) !important;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  color: #1e40af;
+}
+
+.Toastify__toast--warning {
+  background: rgba(255, 251, 235, 0.95) !important;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  color: #92400e;
+}
+
+/* Dark mode support */
+html.dark .Toastify__toast {
+  background: rgba(31, 41, 55, 0.95) !important;
+  border: 1px solid rgba(75, 85, 99, 0.3);
+  color: #f9fafb;
+  backdrop-filter: blur(12px);
+}
+
+html.dark .Toastify__toast--success {
+  background: rgba(6, 78, 59, 0.95) !important;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #a7f3d0;
+}
+
+html.dark .Toastify__toast--error {
+  background: rgba(127, 29, 29, 0.95) !important;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+html.dark .Toastify__toast--info {
+  background: rgba(30, 58, 138, 0.95) !important;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+}
+
+html.dark .Toastify__toast--warning {
+  background: rgba(120, 53, 15, 0.95) !important;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fed7aa;
+}
+
+.Toastify__progress-bar {
+  height: 2px !important;
+  border-radius: 1px !important;
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.8), rgba(59, 130, 246, 0.8)) !important;
+}
+
+.Toastify__close-button {
+  color: inherit !important;
+  opacity: 0.6;
+  transition: all 0.2s ease;
+  padding: 0.25rem;
+  border-radius: 0.375rem;
+  margin-left: 0.5rem;
+}
+
+.Toastify__close-button:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+html.dark .Toastify__close-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Enhanced Toast animations */
+.Toastify__slide-enter {
+  animation: toast-slide-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.Toastify__slide-exit {
+  animation: toast-slide-out 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes toast-slide-in {
+  from { 
+    opacity: 0; 
+    transform: translateY(20px) scale(0.96);
+    filter: blur(4px);
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes toast-slide-out {
+  from { 
+    opacity: 1; 
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+  to { 
+    opacity: 0; 
+    transform: translateY(-10px) scale(0.96);
+    filter: blur(4px);
+  }
+}
+
+/* Custom Confirmation Popup Styles */
+.confirm-popup {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  text-align: center;
+  max-width: 400px;
+  width: 90%;
+}
+
+.confirm-popup p {
+  margin-bottom: 20px;
+  font-size: 16px;
+  color: #333;
+}
+
+.confirm-popup button {
+  margin: 0 10px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s;
+}
+
+.confirm-popup button.confirm {
+  background-color: #dc3545;
+  color: white;
+}
+
+.confirm-popup button.cancel {
+  background-color: #6c757d;
+  color: white;
+}
+
+.confirm-popup button:hover {
+  opacity: 0.9;
+}
+
+.pastel-yellow {
+  color: #FFE066 !important;
+}
+
+/* Ensure proper spacing and centering when sidebar is closed */
+.sidebar-closed main {
+  @apply w-full;
+}
+
+.sidebar-closed .chat-bubble {
+  @apply transition-all duration-300 ease-in-out;
+}
+
+/* Ensure smooth transitions for grid layouts */
+.grid {
+  @apply transition-all duration-300 ease-in-out;
+}
+
+.grid {
+  display: grid;
+}
+
+/* Modern Confirmation Dialog Styles */
+.confirmation-dialog-backdrop {
+  animation: backdrop-fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(8px);
+}
+
+.confirmation-dialog-backdrop.closing {
+  animation: backdrop-fade-out 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.confirmation-dialog-content {
+  animation: dialog-fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 
+    0 20px 60px rgba(0, 0, 0, 0.08),
+    0 8px 24px rgba(0, 0, 0, 0.04),
+    0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.confirmation-dialog-content.closing {
+  animation: dialog-fade-out 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Dark mode for confirmation dialogs */
+html.dark .confirmation-dialog-content {
+  background: rgba(31, 41, 55, 0.98);
+  border: 1px solid rgba(75, 85, 99, 0.3);
+  box-shadow: 
+    0 20px 60px rgba(0, 0, 0, 0.3),
+    0 8px 24px rgba(0, 0, 0, 0.2),
+    0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Enhanced button styles */
+.confirmation-dialog button {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 500;
+  border-radius: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.875rem;
+  border: 1px solid transparent;
+}
+
+.confirmation-dialog button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.confirmation-dialog button:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* Cancel button specific styles */
+.confirmation-dialog button:first-of-type {
+  background: rgba(243, 244, 246, 0.8);
+  color: #374151;
+  border: 1px solid rgba(209, 213, 219, 0.5);
+}
+
+.confirmation-dialog button:first-of-type:hover {
+  background: rgba(229, 231, 235, 0.9);
+  border-color: rgba(156, 163, 175, 0.6);
+}
+
+html.dark .confirmation-dialog button:first-of-type {
+  background: rgba(55, 65, 81, 0.8);
+  color: #d1d5db;
+  border: 1px solid rgba(75, 85, 99, 0.5);
+}
+
+html.dark .confirmation-dialog button:first-of-type:hover {
+  background: rgba(75, 85, 99, 0.9);
+  border-color: rgba(107, 114, 128, 0.6);
+}
+
+/* Confirm button specific styles */
+.confirmation-dialog button:last-of-type {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: white;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.confirmation-dialog button:last-of-type:hover {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  border-color: rgba(220, 38, 38, 0.4);
+}
+
+html.dark .confirmation-dialog button:last-of-type {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  border: 1px solid rgba(220, 38, 38, 0.4);
+}
+
+html.dark .confirmation-dialog button:last-of-type:hover {
+  background: linear-gradient(135deg, #b91c1c, #991b1b);
+  border-color: rgba(185, 28, 28, 0.5);
+}
+
+/* Confirmation Dialog Keyframe Animations */
+@keyframes dialog-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-8px);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes dialog-fade-out {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96) translateY(-8px);
+    filter: blur(2px);
+  }
+}
+
+@keyframes backdrop-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes backdrop-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Custom Tooltip Styles */
+.react-tooltip {
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: normal;
+  max-width: 120px;
+  word-wrap: break-word;
+  z-index: 9999;
+  border: none;
+  box-shadow: none;
+  opacity: 0.9;
+  transition: opacity 0.15s ease;
+}
+
+/* Remove tooltip arrow */
+.react-tooltip::before {
+  display: none;
+}
+
+/* Dark mode adjustments */
+html.dark .react-tooltip {
+  background: rgba(255, 255, 255, 0.9);
+  color: #1f2937;
+}
+
+/* Animation keyframes */
+@keyframes tooltip-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+} 

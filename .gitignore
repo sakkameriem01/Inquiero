@@ -1,0 +1,112 @@
+# Python (Backend)
+backend/__pycache__/
+backend/*.py[cod]
+backend/*$py.class
+backend/*.so
+backend/.Python
+backend/build/
+backend/develop-eggs/
+backend/dist/
+backend/downloads/
+backend/eggs/
+backend/.eggs/
+backend/lib/
+backend/lib64/
+backend/parts/
+backend/sdist/
+backend/var/
+backend/wheels/
+backend/*.egg-info/
+backend/.installed.cfg
+backend/*.egg
+backend/MANIFEST
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Data files - PDFs are stored in data/pdfs/ only
+backend/data/pdfs/*.pdf
+
+# Chat history - only JSON files, no PDFs
+backend/chat_history/*.json
+
+# Model files
+backend/models/
+
+# FAISS index files
+backend/models/faiss/
+
+# Large text files
+*.txt
+*.csv
+!backend/requirements.txt
+!frontend/package.json
+!backend/*.config.json
+
+# Node.js (Frontend)
+frontend/node_modules/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.npm
+frontend/.yarn-integrity
+
+# React build
+frontend/build/
+frontend/dist/
+
+# Coverage reports
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Keep .github/images folder for README screenshots
+!.github/
+!.github/images/
+!.github/images/*.png
+!.github/images/*.jpg
+!.github/images/*.jpeg
+!.github/images/*.gif 
