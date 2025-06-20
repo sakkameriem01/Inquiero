@@ -32,29 +32,29 @@ Inquiero is a full-stack application that uses a Retrieval-Augmented Generation 
 ### Installation & Launch
 
 1.  **Clone the Repository**
-    ```bash
+   ```bash
     git clone https://github.com/yourusername/inquiero.git
-    cd inquiero
-    ```
+   cd inquiero
+   ```
 
 2.  **Set Up & Run Backend**
-    ```bash
+   ```bash
     cd backend
     python -m venv .venv
     source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-    pip install -r requirements.txt
+   pip install -r requirements.txt
     python run.py
-    ```
+   ```
 
 3.  **Set Up & Run Frontend** (in a new terminal)
-    ```bash
+   ```bash
     cd frontend
     npm install
     npm start
-    ```
+   ```
 
 4.  **Run Ollama** (in a new terminal, if not already running)
-    ```bash
+   ```bash
     ollama serve
     ```
     *Ensure you have pulled the Mistral model: `ollama pull mistral`*

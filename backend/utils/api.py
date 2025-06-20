@@ -67,7 +67,7 @@ async def upload_pdf(file: UploadFile = File(...), chat_id: Optional[str] = Body
             updated_chat = chat_manager.append_pdf_to_chat(chat_id, pdf_path)
             if not updated_chat:
                 raise HTTPException(status_code=500, detail="Failed to append PDF to chat")
-            
+
             return JSONResponse({
                 "message": "PDF uploaded and appended to chat successfully",
                 "filename": file.filename,
@@ -167,7 +167,7 @@ async def send_message(chat_id: str, message: Message):
         
         language = message.language or "en"
         chat_manager.add_message(chat_id, "user", user_text)
-        
+
         # Get PDF paths for this chat
     pdf_paths = chat.get("pdf_paths", [])
         
@@ -176,7 +176,7 @@ async def send_message(chat_id: str, message: Message):
         
         # Generate AI response using RAG
         ai_response = pdf_processor.get_llm_response(user_text, pdf_paths, chat_history, language=language)
-        
+
         # Add AI response to chat
         chat_manager.add_message(chat_id, "assistant", ai_response)
         
