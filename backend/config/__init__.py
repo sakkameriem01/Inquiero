@@ -1,7 +1,3 @@
 """
-Configuration modules for the Inquiero application.
-"""
-
-"""
-Config package initialization
+Config package initialization for Inquiero backend.
 """ 

@@ -1,3 +1,7 @@
+"""
+Entry point for the Inquiero backend server.
+"""
+
 import uvicorn
 from pathlib import Path
 import sys

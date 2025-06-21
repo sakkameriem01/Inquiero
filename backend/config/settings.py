@@ -1,4 +1,7 @@
-import os
+"""
+Configuration settings for the Inquiero backend.
+"""
+
 from pathlib import Path
 
 # Project root directory

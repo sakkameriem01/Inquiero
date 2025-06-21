@@ -10,9 +10,8 @@ This module implements sophisticated RAG techniques including:
 """
 
 import logging
-from typing import List, Dict, Optional, Tuple, Any
+from typing import List, Dict, Optional, Any
 from pathlib import Path
-import json
 import re
 from datetime import datetime
 
@@ -22,8 +21,6 @@ from langchain_community.vectorstores import FAISS
 from langchain.schema import Document
 from langchain_community.retrievers import BM25Retriever
 from langchain.retrievers import EnsembleRetriever
-from langchain.retrievers.document_compressors import LLMChainExtractor
-from langchain.retrievers import ContextualCompressionRetriever
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
 from langchain.memory import ConversationBufferWindowMemory
